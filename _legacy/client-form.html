@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Registration - Auditra</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 700px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        .form-section {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .form-section:last-child {
+            border-bottom: none;
+        }
+
+        .section-title {
+            color: #667eea;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        label .required {
+            color: #e74c3c;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="password"],
+        input[type="tel"],
+        textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            font-size: 12px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+            border: 1px solid #c3e6cb;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+
+        .loader {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loader.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>👤 Client Registration</h1>
+            <p>Register as a client in the Auditra system</p>
+        </div>
+
+        <div class="success-message" id="successMessage"></div>
+
+        <form id="clientForm">
+            <!-- Personal Information Section -->
+            <div class="form-section">
+                <div class="section-title">Personal Information</div>
+                
+                <div class="form-group">
+                    <label for="firstName">First Name</label>
+                    <input type="text" id="firstName" name="firstName">
+                </div>
+
+                <div class="form-group">
+                    <label for="lastName">Last Name</label>
+                    <input type="text" id="lastName" name="lastName">
+                </div>
+
+                <div class="form-group">
+                    <label for="address">Address</label>
+                    <textarea id="address" name="address" rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <input type="tel" id="phone" name="phone">
+                </div>
+
+                <div class="form-group">
+                    <label for="nic">NIC</label>
+                    <input type="text" id="nic" name="nic" placeholder="National Identity Card Number">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email <span class="required">*</span></label>
+                    <input type="email" id="email" name="email" required>
+                    <div class="error-message" id="emailError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="companyName">Company Name</label>
+                    <input type="text" id="companyName" name="companyName" placeholder="Optional">
+                </div>
+            </div>
+
+            <!-- Project Information Section -->
+            <div class="form-section">
+                <div class="section-title">Project Information</div>
+                
+                <div class="form-group">
+                    <label for="projectTitle">Project Title <span class="required">*</span></label>
+                    <input type="text" id="projectTitle" name="projectTitle" required>
+                    <div class="error-message" id="projectTitleError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="projectDescription">Project Description <span class="required">*</span></label>
+                    <textarea id="projectDescription" name="projectDescription" rows="5" required></textarea>
+                    <div class="error-message" id="projectDescriptionError"></div>
+                </div>
+            </div>
+
+            <!-- Agent Information Section -->
+            <div class="form-section">
+                <div class="section-title">Agent Information</div>
+                
+                <div class="form-group">
+                    <label for="agentName">Agent Name <span class="required">*</span></label>
+                    <input type="text" id="agentName" name="agentName" required>
+                    <div class="error-message" id="agentNameError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="agentPhone">Agent Phone Number <span class="required">*</span></label>
+                    <input type="tel" id="agentPhone" name="agentPhone" required>
+                    <div class="error-message" id="agentPhoneError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="agentEmail">Agent Email <span class="required">*</span></label>
+                    <input type="email" id="agentEmail" name="agentEmail" required>
+                    <div class="error-message" id="agentEmailError"></div>
+                </div>
+            </div>
+
+
+            <div class="loader" id="loader">
+                <div class="spinner"></div>
+                <p style="margin-top: 10px; color: #666;">Registering...</p>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">Register as Client</button>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('clientForm');
+        const loader = document.getElementById('loader');
+        const submitBtn = document.getElementById('submitBtn');
+        const successMessage = document.getElementById('successMessage');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Clear previous errors
+            document.querySelectorAll('.error-message').forEach(el => {
+                el.classList.remove('show');
+                el.textContent = '';
+            });
+
+            // Get form values
+            const email = document.getElementById('email').value.trim();
+            const firstName = document.getElementById('firstName').value.trim();
+            const lastName = document.getElementById('lastName').value.trim();
+            const address = document.getElementById('address').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            const nic = document.getElementById('nic').value.trim();
+            const companyName = document.getElementById('companyName').value.trim();
+            const projectTitle = document.getElementById('projectTitle').value.trim();
+            const projectDescription = document.getElementById('projectDescription').value.trim();
+            const agentName = document.getElementById('agentName').value.trim();
+            const agentPhone = document.getElementById('agentPhone').value.trim();
+            const agentEmail = document.getElementById('agentEmail').value.trim();
+            const apiUrl = 'http://localhost:8000/api';
+
+            // Validation
+            let hasError = false;
+
+            // Required field validations
+            if (!email || !isValidEmail(email)) {
+                showError('emailError', 'Please enter a valid email address');
+                hasError = true;
+            }
+
+            if (!projectTitle) {
+                showError('projectTitleError', 'Project title is required');
+                hasError = true;
+            }
+
+            if (!projectDescription) {
+                showError('projectDescriptionError', 'Project description is required');
+                hasError = true;
+            }
+
+            if (!agentName) {
+                showError('agentNameError', 'Agent name is required');
+                hasError = true;
+            }
+
+            if (!agentPhone) {
+                showError('agentPhoneError', 'Agent phone number is required');
+                hasError = true;
+            }
+
+            if (!agentEmail || !isValidEmail(agentEmail)) {
+                showError('agentEmailError', 'Please enter a valid agent email address');
+                hasError = true;
+            }
+
+            if (hasError) return;
+
+            // Show loader
+            loader.classList.add('show');
+            submitBtn.disabled = true;
+            successMessage.classList.remove('show');
+
+            try {
+                const response = await fetch(`${apiUrl}/clients/register/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        first_name: firstName || undefined,
+                        last_name: lastName || undefined,
+                        // Additional client fields
+                        address: address || undefined,
+                        phone: phone || undefined,
+                        nic: nic || undefined,
+                        company_name: companyName || undefined,
+                        project_title: projectTitle,
+                        project_description: projectDescription,
+                        agent_name: agentName,
+                        agent_phone: agentPhone,
+                        agent_email: agentEmail,
+                    }),
+                });
+
+                loader.classList.remove('show');
+                submitBtn.disabled = false;
+
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                let data = {};
+                
+                if (contentType && contentType.includes('application/json')) {
+                    try {
+                        data = await response.json();
+                    } catch (jsonError) {
+                        console.error('JSON parse error:', jsonError);
+                        showError('emailError', 'Invalid response from server. Please check if the backend is running and the endpoint exists.');
+                        return;
+                    }
+                } else {
+                    // Response is HTML (error page)
+                    const textResponse = await response.text();
+                    console.error('Server returned HTML instead of JSON:', textResponse.substring(0, 200));
+                    
+                    if (response.status === 404) {
+                        showError('emailError', 'API endpoint not found. Please check if the backend is running and the endpoint /api/clients/register/ exists.');
+                    } else if (response.status === 500) {
+                        showError('emailError', 'Server error. Please check the backend logs and ensure the server is running correctly.');
+                    } else {
+                        showError('emailError', `Server error (Status: ${response.status}). Please check if the backend is running at ${apiUrl}`);
+                    }
+                    return;
+                }
+
+                if (response.ok) {
+                    // Success
+                    const name = firstName || lastName ? `${firstName} ${lastName}`.trim() : 'Client';
+                    successMessage.textContent = `Success! ${name} has been registered. The admin will review your application and create your account.`;
+                    successMessage.classList.add('show');
+                    form.reset();
+                    
+                    // Scroll to top
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else {
+                    // Error
+                    let errorMsg = 'Registration failed. Please try again.';
+                    if (data.error) {
+                        errorMsg = data.error;
+                    } else if (data.message) {
+                        errorMsg = data.message;
+                    } else if (data.email) {
+                        errorMsg = `Email: ${Array.isArray(data.email) ? data.email[0] : data.email}`;
+                    } else if (data.detail) {
+                        errorMsg = data.detail;
+                    } else if (typeof data === 'object' && Object.keys(data).length > 0) {
+                        // Get first error message from validation errors
+                        const firstKey = Object.keys(data)[0];
+                        const firstError = data[firstKey];
+                        errorMsg = `${firstKey}: ${Array.isArray(firstError) ? firstError[0] : firstError}`;
+                    }
+                    showError('emailError', errorMsg);
+                }
+            } catch (error) {
+                loader.classList.remove('show');
+                submitBtn.disabled = false;
+                
+                let errorMessage = 'Connection error. ';
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMessage += 'Cannot connect to the server. Please make sure the backend is running at ' + apiUrl;
+                } else if (error.message.includes('JSON')) {
+                    errorMessage += 'Invalid response from server. Please check if the backend is running.';
+                } else {
+                    errorMessage += error.message;
+                }
+                
+                showError('emailError', errorMessage);
+            }
+        });
+
+        function showError(elementId, message) {
+            const errorEl = document.getElementById(elementId);
+            if (errorEl) {
+                errorEl.textContent = message;
+                errorEl.classList.add('show');
+            }
+        }
+
+        function isValidEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+    </script>
+</body>
+</html>
+
