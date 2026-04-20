@@ -21,6 +21,8 @@ class ProjectPaymentSerializer(serializers.ModelSerializer):
             'payment_requested_by_name', 'payment_approved_at', 'payment_approved_by',
             'payment_approved_by_name', 'payment_rejection_reason', 'payment_rejection_count',
             'last_rejected_at', 'coordinator_notes', 'client_notes', 'payment_instructions',
+            'payment_method', 'gateway_order_id', 'gateway_payment_id', 'gateway_status',
+            'gateway_payment_data', 'gateway_paid_at',
             'agent_payment_amount', 'agent_payment_status', 'agent_paid_at', 'agent_paid_by',
             'agent_paid_by_name', 'agent_payment_notes',
             'created_at', 'updated_at'
@@ -28,7 +30,9 @@ class ProjectPaymentSerializer(serializers.ModelSerializer):
         read_only_fields = (
             'created_at', 'updated_at', 'bank_slip_uploaded_at', 'bank_slip_uploaded_by',
             'payment_requested_at', 'payment_requested_by', 'payment_approved_at',
-            'payment_approved_by', 'last_rejected_at', 'agent_paid_at', 'agent_paid_by'
+            'payment_approved_by', 'last_rejected_at', 'agent_paid_at', 'agent_paid_by',
+            'gateway_order_id', 'gateway_payment_id', 'gateway_status', 'gateway_payment_data',
+            'gateway_paid_at'
         )
     
     def get_bank_slip_url(self, obj):

@@ -12,10 +12,15 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
-from decouple import config
+from decouple import Config, RepositoryEnv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+# Load environment variables from the backend .env file explicitly so the
+# payment gateway settings are available regardless of the working directory.
+config = Config(RepositoryEnv(str(BASE_DIR / '.env')))
 
 
 # Quick-start development settings - unsuitable for production
@@ -200,3 +205,16 @@ EMAIL_TIMEOUT = 30  # seconds
 
 # Frontend URL (used for login links in emails)
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+# PayHere payment gateway settings
+PAYHERE_MERCHANT_ID = config('PAYHERE_MERCHANT_ID', default='1235300')
+PAYHERE_MERCHANT_SECRET = config(
+    'PAYHERE_MERCHANT_SECRET',
+    default='NDE1NDQ4ODY5NzE4NDEzMzA1MzQyMjc0NzIzNjIwMTIzMDM3NDg0Mw=='
+)
+PAYHERE_CURRENCY = config('PAYHERE_CURRENCY', default='LKR')
+PAYHERE_CHECKOUT_URL = config('PAYHERE_CHECKOUT_URL', default='https://sandbox.payhere.lk/pay/checkout')
+PAYHERE_RETURN_URL = config('PAYHERE_RETURN_URL', default=f'{FRONTEND_URL}/dashboard/client-payments')
+PAYHERE_CANCEL_URL = config('PAYHERE_CANCEL_URL', default=f'{FRONTEND_URL}/dashboard/client-payments')
+PAYHERE_NOTIFY_URL = config('PAYHERE_NOTIFY_URL', default='http://localhost:8000/api/projects/payhere/notify/')
+PAYHERE_DUMMY_MODE = config('PAYHERE_DUMMY_MODE', default=True, cast=bool)

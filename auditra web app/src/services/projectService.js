@@ -94,6 +94,9 @@ const projectService = {
     });
   },
 
+  initiatePayHerePayment: (projectId) =>
+    axiosClient.post(`/projects/${projectId}/initiate-payhere-payment/`),
+
   approvePayment: (projectId, coordinatorNotes = '') =>
     axiosClient.post(`/projects/${projectId}/approve-payment/`, { coordinator_notes: coordinatorNotes }),
 

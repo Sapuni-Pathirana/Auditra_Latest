@@ -30,6 +30,7 @@ urlpatterns = [
     # Payment workflow endpoints
     path('<int:project_id>/send-payment-request/', views.SendPaymentRequestView.as_view(), name='send-payment-request'),
     path('<int:project_id>/upload-bank-slip/', views.UploadBankSlipView.as_view(), name='upload-bank-slip'),
+    path('<int:project_id>/initiate-payhere-payment/', views.InitiatePayHerePaymentView.as_view(), name='initiate-payhere-payment'),
     path('<int:project_id>/approve-payment/', views.ApprovePaymentView.as_view(), name='approve-payment'),
     path('<int:project_id>/reject-payment/', views.RejectPaymentView.as_view(), name='reject-payment'),
     path('<int:project_id>/payment-details/', views.GetPaymentDetailsView.as_view(), name='payment-details'),
@@ -37,6 +38,7 @@ urlpatterns = [
     path('client-payments/', views.ClientPaymentOverviewView.as_view(), name='client-payments'),
     path('agent-payments/', views.AgentPaymentOverviewView.as_view(), name='agent-payments'),
     path('<int:project_id>/record-agent-payment/', views.RecordAgentPaymentView.as_view(), name='record-agent-payment'),
+    path('payhere/notify/', views.PayHerePaymentNotificationView.as_view(), name='payhere-notify'),
     # Cancellation request endpoints
     path('<int:project_id>/request-cancellation/', views.RequestCancellationView.as_view(), name='request-cancellation'),
     path('<int:project_id>/cancellation-status/', views.GetProjectCancellationStatusView.as_view(), name='cancellation-status'),

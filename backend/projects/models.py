@@ -312,6 +312,45 @@ class ProjectPayment(models.Model):
         help_text='Payment instructions sent to the client'
     )
 
+    # Gateway payment tracking
+    payment_method = models.CharField(
+        max_length=20,
+        choices=[
+            ('bank_slip', 'Bank Slip'),
+            ('payhere', 'PayHere'),
+        ],
+        default='bank_slip',
+        help_text='How the client completed or intends to complete the payment'
+    )
+    gateway_order_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Gateway order reference used for PayHere checkout'
+    )
+    gateway_payment_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Gateway transaction reference returned by PayHere'
+    )
+    gateway_status = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text='Latest gateway status such as initiated, paid, cancelled, or failed'
+    )
+    gateway_payment_data = models.JSONField(
+        blank=True,
+        null=True,
+        help_text='Raw PayHere callback or initiation payload for auditing'
+    )
+    gateway_paid_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the gateway payment was confirmed'
+    )
+
     # Agent payment fields
     agent_payment_amount = models.DecimalField(
         max_digits=12,

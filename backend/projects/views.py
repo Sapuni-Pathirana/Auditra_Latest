@@ -1,11 +1,20 @@
-from rest_framework import status, generics, serializers
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser
+import base64
+import hashlib
+import logging
+import re
+import uuid
+from decimal import Decimal
+
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.utils import timezone
+from rest_framework import status, generics, serializers
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from .models import Project, ProjectDocument, ProjectStatusHistory, ProjectPayment, ProjectCancellationRequest, CommissionReport
 from .serializers import (
     ProjectSerializer,
@@ -21,9 +30,62 @@ from .serializers import (
     AssignSeniorValuerSerializer
 )
 from .utils import check_user_by_email, process_client_for_project, process_agent_for_project
-import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _format_payhere_amount(value):
+    return f"{Decimal(value).quantize(Decimal('0.01')):.2f}"
+
+
+def _normalize_payhere_secret():
+    secret = str(getattr(settings, 'PAYHERE_MERCHANT_SECRET', '')).strip()
+    if not secret:
+        return ''
+
+    try:
+        decoded = base64.b64decode(secret, validate=True).decode('utf-8').strip()
+        return decoded or secret
+    except Exception:
+        return secret
+
+
+def _payhere_secret_hash():
+    secret = _normalize_payhere_secret()
+    return hashlib.md5(secret.encode('utf-8')).hexdigest().upper()
+
+
+def _build_payhere_checkout_hash(order_id, amount, currency):
+    payload = f"{settings.PAYHERE_MERCHANT_ID}{order_id}{amount}{currency}{_payhere_secret_hash()}"
+    return hashlib.md5(payload.encode('utf-8')).hexdigest().upper()
+
+
+def _build_payhere_notification_hash(order_id, amount, currency, status_code):
+    payload = f"{settings.PAYHERE_MERCHANT_ID}{order_id}{amount}{currency}{status_code}{_payhere_secret_hash()}"
+    return hashlib.md5(payload.encode('utf-8')).hexdigest().upper()
+
+
+def _get_client_payment_contact(project):
+    client = project.assigned_client
+    client_info = project.client_info or {}
+
+    first_name = (client.first_name if client else '') or client_info.get('first_name') or 'Client'
+    last_name = (client.last_name if client else '') or client_info.get('last_name') or 'Customer'
+    email = (client.email if client else '') or client_info.get('email') or ''
+    phone = client_info.get('phone') or ''
+    address = client_info.get('address') or 'Sri Lanka'
+    city = client_info.get('city') or 'Colombo'
+    country = client_info.get('country') or 'Sri Lanka'
+
+    return {
+        'first_name': first_name,
+        'last_name': last_name,
+        'email': email,
+        'phone': re.sub(r'\D+', '', str(phone)),
+        'address': address,
+        'city': city,
+        'country': country,
+    }
 
 
 def get_user_role(user):
@@ -1508,8 +1570,13 @@ class ApprovePaymentView(APIView):
         payment.payment_status = 'approved'
         payment.payment_approved_at = timezone.now()
         payment.payment_approved_by = request.user
+        payment.project.payment_completed = True
+        payment.project.save(update_fields=['payment_completed', 'updated_at'])
         payment.coordinator_notes = request.data.get('coordinator_notes', payment.coordinator_notes)
-        payment.save()
+        payment.save(update_fields=[
+            'payment_status', 'payment_approved_at', 'payment_approved_by',
+            'coordinator_notes', 'updated_at'
+        ])
 
         # Send email to client
         try:
@@ -1625,6 +1692,198 @@ class RejectPaymentView(APIView):
             'message': 'Payment rejected. Client has been notified to re-upload the bank slip.',
             'payment': ProjectPaymentSerializer(payment, context={'request': request}).data
         }, status=status.HTTP_200_OK)
+
+
+class InitiatePayHerePaymentView(APIView):
+    """Create a PayHere checkout payload for a client project payment"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, project_id):
+        user_role = get_user_role(request.user)
+        if user_role != 'client':
+            return Response(
+                {'error': 'Only clients can initiate gateway payments'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            project = Project.objects.select_related('assigned_client').get(
+                id=project_id,
+                assigned_client=request.user
+            )
+        except Project.DoesNotExist:
+            return Response(
+                {'error': 'Project not found or not assigned to you'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            payment = project.payment
+        except ProjectPayment.DoesNotExist:
+            return Response(
+                {'error': 'No payment request found for this project'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if payment.payment_status not in ['requested', 'rejected']:
+            return Response(
+                {'error': f'Gateway payment is only available after a payment request (current status: {payment.payment_status})'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        amount = Decimal(payment.estimated_value or project.estimated_value or 0).quantize(Decimal('0.01'))
+        if amount <= 0:
+            return Response(
+                {'error': 'Payment amount must be greater than zero'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if getattr(settings, 'PAYHERE_DUMMY_MODE', False):
+            order_id = f'DUMMY{project.id}{uuid.uuid4().hex[:10].upper()}'
+            amount_str = _format_payhere_amount(amount)
+            now_iso = timezone.now().isoformat()
+
+            payment.payment_method = 'payhere'
+            payment.gateway_order_id = order_id
+            payment.gateway_status = 'dummy_paid'
+            payment.gateway_payment_id = f'DUMMYTXN{uuid.uuid4().hex[:12].upper()}'
+            payment.gateway_paid_at = timezone.now()
+            payment.payment_status = 'approved'
+            payment.payment_approved_at = timezone.now()
+            payment.gateway_payment_data = {
+                'mode': 'dummy',
+                'initiated_by': request.user.id,
+                'initiated_at': now_iso,
+                'amount': amount_str,
+                'currency': settings.PAYHERE_CURRENCY,
+            }
+            payment.project.payment_completed = True
+            payment.project.save(update_fields=['payment_completed', 'updated_at'])
+            payment.save(update_fields=[
+                'payment_method', 'gateway_order_id', 'gateway_status', 'gateway_payment_id',
+                'gateway_paid_at', 'payment_status', 'payment_approved_at', 'gateway_payment_data', 'updated_at'
+            ])
+
+            return Response({
+                'success': True,
+                'dummy_mode': True,
+                'message': 'Dummy payment completed successfully',
+                'payment': ProjectPaymentSerializer(payment, context={'request': request}).data,
+            }, status=status.HTTP_200_OK)
+
+        if not str(settings.PAYHERE_MERCHANT_ID).strip() or not _normalize_payhere_secret():
+            return Response(
+                {'error': 'PayHere gateway is not configured correctly'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        order_id = f'PAY{project.id}{uuid.uuid4().hex[:12].upper()}'
+        amount_str = _format_payhere_amount(amount)
+        contact = _get_client_payment_contact(project)
+
+        missing_contact_fields = [
+            field for field in ('first_name', 'last_name', 'email', 'phone', 'address', 'city', 'country')
+            if not str(contact.get(field, '')).strip()
+        ]
+        if missing_contact_fields:
+            return Response(
+                {
+                    'error': 'Client contact details are incomplete for PayHere checkout',
+                    'missing_fields': missing_contact_fields,
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        payment.payment_method = 'payhere'
+        payment.gateway_order_id = order_id
+        payment.gateway_status = 'initiated'
+        payment.gateway_payment_data = {
+            'initiated_by': request.user.id,
+            'initiated_at': timezone.now().isoformat(),
+            'amount': amount_str,
+            'currency': settings.PAYHERE_CURRENCY,
+        }
+        payment.save(update_fields=[
+            'payment_method', 'gateway_order_id', 'gateway_status', 'gateway_payment_data', 'updated_at'
+        ])
+
+        payload = {
+            'merchant_id': settings.PAYHERE_MERCHANT_ID,
+            'return_url': f"{settings.PAYHERE_RETURN_URL}?payment_status=success&order_id={order_id}",
+            'cancel_url': f"{settings.PAYHERE_CANCEL_URL}?payment_status=cancelled&order_id={order_id}",
+            'notify_url': settings.PAYHERE_NOTIFY_URL,
+            'order_id': order_id,
+            'items': f'Project payment - {project.title}',
+            'amount': amount_str,
+            'currency': settings.PAYHERE_CURRENCY,
+            'hash': _build_payhere_checkout_hash(order_id, amount_str, settings.PAYHERE_CURRENCY),
+            'first_name': contact['first_name'],
+            'last_name': contact['last_name'],
+            'email': contact['email'],
+            'phone': contact['phone'],
+            'address': contact['address'],
+            'city': contact['city'],
+            'country': contact['country'],
+            'custom_1': str(project.id),
+            'custom_2': str(payment.id),
+        }
+
+        return Response({
+            'success': True,
+            'message': 'PayHere checkout created successfully',
+            'checkout_url': settings.PAYHERE_CHECKOUT_URL,
+            'payload': payload,
+            'payment': ProjectPaymentSerializer(payment, context={'request': request}).data,
+        }, status=status.HTTP_200_OK)
+
+
+class PayHerePaymentNotificationView(APIView):
+    """PayHere server-to-server callback endpoint"""
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        merchant_id = str(request.data.get('merchant_id', '')).strip()
+        order_id = str(request.data.get('order_id', '')).strip()
+        amount = _format_payhere_amount(request.data.get('payhere_amount') or request.data.get('amount') or 0)
+        currency = str(request.data.get('payhere_currency') or request.data.get('currency') or '').strip()
+        status_code = str(request.data.get('status_code', '')).strip()
+        signature = str(request.data.get('md5sig', '')).strip().upper()
+
+        if merchant_id != settings.PAYHERE_MERCHANT_ID:
+            return Response({'error': 'Invalid merchant id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        expected_signature = _build_payhere_notification_hash(order_id, amount, currency, status_code)
+        if signature != expected_signature:
+            return Response({'error': 'Invalid payment signature'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payment = ProjectPayment.objects.select_related('project').get(gateway_order_id=order_id)
+        except ProjectPayment.DoesNotExist:
+            return Response({'error': 'Payment record not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        payment.gateway_payment_data = request.data
+
+        if status_code == '2':
+            payment.gateway_status = 'paid'
+            payment.gateway_payment_id = str(request.data.get('payment_id') or request.data.get('payhere_payment_id') or '')
+            payment.gateway_paid_at = timezone.now()
+            payment.payment_status = 'approved'
+            payment.payment_approved_at = timezone.now()
+            payment.project.payment_completed = True
+            payment.project.save(update_fields=['payment_completed', 'updated_at'])
+            payment.save(update_fields=[
+                'gateway_payment_data', 'gateway_status', 'gateway_payment_id', 'gateway_paid_at',
+                'payment_status', 'payment_approved_at', 'updated_at'
+            ])
+        elif status_code in {'0', '1'}:
+            payment.gateway_status = 'pending'
+            payment.save(update_fields=['gateway_payment_data', 'gateway_status', 'updated_at'])
+        else:
+            payment.gateway_status = 'failed'
+            payment.save(update_fields=['gateway_payment_data', 'gateway_status', 'updated_at'])
+
+        return Response({'success': True}, status=status.HTTP_200_OK)
 
 
 class GetPaymentDetailsView(APIView):
@@ -1833,6 +2092,7 @@ class ClientPaymentOverviewView(APIView):
                 'status': project.status,
                 'status_display': project.get_status_display(),
                 'estimated_value': str(project.estimated_value),
+                'payment_completed': project.payment_completed,
                 'coordinator_name': f"{project.coordinator.first_name} {project.coordinator.last_name}".strip() or project.coordinator.username if project.coordinator else None,
                 'created_at': project.created_at.isoformat(),
                 'payment': payment_data

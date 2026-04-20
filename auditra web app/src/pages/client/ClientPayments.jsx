@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import {
   Payment as PaymentIcon, CloudUpload, CheckCircle, HourglassEmpty,
-  Receipt, AttachMoney, Warning, ErrorOutline, Visibility, Info
+  Receipt, AttachMoney, Warning, ErrorOutline, Visibility, Info, CreditCard
 } from '@mui/icons-material';
 import projectService from '../../services/projectService';
 
@@ -81,6 +81,7 @@ export default function ClientPayments() {
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [gatewayLoading, setGatewayLoading] = useState(false);
 
   const fetchPayments = useCallback(async () => {
     try {
@@ -96,6 +97,8 @@ export default function ClientPayments() {
           project_status: p.status,
           estimated_value: p.payment.estimated_value || p.estimated_value,
           payment_status: p.payment.payment_status,
+          payment_method: p.payment.payment_method,
+          gateway_status: p.payment.gateway_status,
           payment_instructions: p.payment.payment_instructions,
           bank_slip_url: p.payment.bank_slip_url,
           rejection_reason: p.payment.payment_rejection_reason,
@@ -114,6 +117,20 @@ export default function ClientPayments() {
 
   useEffect(() => {
     fetchPayments();
+  }, [fetchPayments]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get('payment_status');
+
+    if (paymentStatus === 'success') {
+      setSuccess('PayHere payment completed successfully.');
+      fetchPayments();
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (paymentStatus === 'cancelled') {
+      setError('PayHere payment was cancelled.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, [fetchPayments]);
 
   const handleOpenUpload = (payment) => {
@@ -147,6 +164,47 @@ export default function ClientPayments() {
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to upload bank slip');
       setUploading(false);
+    }
+  };
+
+  const handlePayHereCheckout = async (payment) => {
+    setGatewayLoading(true);
+    setError('');
+
+    try {
+      const res = await projectService.initiatePayHerePayment(payment.project_id);
+      if (res.data?.dummy_mode) {
+        setSuccess(res.data?.message || 'Dummy payment completed successfully.');
+        setGatewayLoading(false);
+        fetchPayments();
+        return;
+      }
+
+      const checkoutUrl = res.data?.checkout_url;
+      const payload = res.data?.payload || {};
+
+      if (!checkoutUrl) {
+        throw new Error('Missing PayHere checkout URL');
+      }
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = checkoutUrl;
+      form.style.display = 'none';
+
+      Object.entries(payload).forEach(([name, value]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value ?? '';
+        form.appendChild(input);
+      });
+
+      document.body.appendChild(form);
+      form.submit();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Failed to start PayHere checkout');
+      setGatewayLoading(false);
     }
   };
 
@@ -193,7 +251,7 @@ export default function ClientPayments() {
                 Payment Instructions
               </Typography>
               <Typography variant="body2">
-                Please make your payment to the following bank account and upload the bank slip:
+                You can now pay through the PayHere gateway or continue with the bank slip flow below:
               </Typography>
               <Box sx={{ mt: 1, ml: 2 }}>
                 <Typography variant="body2">• Bank: Peoples Bank</Typography>
@@ -270,15 +328,27 @@ export default function ClientPayments() {
                             </Typography>
                           </Grid>
                           <Grid item xs={12} sm={3}>
-                            <Button
-                              variant="contained"
-                              startIcon={<CloudUpload />}
-                              onClick={() => handleOpenUpload(payment)}
-                              fullWidth
-                              sx={{ fontWeight: 600 }}
-                            >
-                              Upload Bank Slip
-                            </Button>
+                            <Stack spacing={1}>
+                              <Button
+                                variant="contained"
+                                startIcon={<CreditCard />}
+                                onClick={() => handlePayHereCheckout(payment)}
+                                disabled={gatewayLoading}
+                                fullWidth
+                                sx={{ fontWeight: 600 }}
+                              >
+                                Pay with PayHere
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                startIcon={<CloudUpload />}
+                                onClick={() => handleOpenUpload(payment)}
+                                fullWidth
+                                sx={{ fontWeight: 600 }}
+                              >
+                                Upload Bank Slip
+                              </Button>
+                            </Stack>
                           </Grid>
                         </Grid>
                       </CardContent>
@@ -390,7 +460,12 @@ export default function ClientPayments() {
                             </Box>
                             {payment.approved_at && (
                               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                                Approved on {formatDate(payment.approved_at)}
+                                Approved on {formatDate(payment.payment_approved_at)}
+                              </Typography>
+                            )}
+                            {payment.payment_method && (
+                              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                                Paid via {payment.payment_method === 'payhere' ? 'PayHere' : 'bank slip'}
                               </Typography>
                             )}
                           </Grid>
