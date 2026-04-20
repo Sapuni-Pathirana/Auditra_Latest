@@ -1,42 +1,51 @@
-# Flutter/Dart
+# -----------------------------
+# OS / Editor
+# -----------------------------
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+.atom/
+*.iml
+*.swp
+*.swo
+*~
+
+# -----------------------------
+# Logs / temp
+# -----------------------------
+*.log
+*.bak
+tmpclaude-*
+
+# -----------------------------
+# Environment files
+# -----------------------------
+.env
+*.env
+!.env.example
+
+# -----------------------------
+# Flutter / Dart
+# -----------------------------
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
 .pub-cache/
 .pub/
-build/
-*.iml
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.buildlog/
-.history
-.svn/
-migrate_working_dir/
-*.mode1v3
-*.mode2v3
-*.moved-aside
-*.pbxuser
-*.perspectivev3
-**/.idea/
-*.hprof
-
-# Flutter/Dart specific
 coverage/
 lib/generated_plugin_registrant.dart
-pubspec.lock
 
-# Android/IntelliJ
-.idea/
-.gradle
+# Flutter build outputs
+build/
+
+# Android / Gradle
+.gradle/
 local.properties
-*.iml
-*.hprof
 
-# iOS/Xcode
+# iOS / Xcode
 **/Pods/
 **/.symlinks/
 **/Flutter/Flutter.framework
@@ -45,11 +54,10 @@ local.properties
 **/Flutter/ephemeral/
 **/Flutter/flutter_export_environment.sh
 **/Podfile.lock
-**/.vagrant/
-**/.sconsign.dblite
-**/.tags*
 
-# Python/Django
+# -----------------------------
+# Python / Django
+# -----------------------------
 __pycache__/
 *.py[cod]
 *$py.class
@@ -60,55 +68,41 @@ ENV/
 env/
 *.egg-info/
 dist/
-build/
 
-# Django
-*.log
+# Django local/runtime artifacts
 db.sqlite3
 db.sqlite3-journal
+*.sqlite3
+*.db
 media/
 staticfiles/
 
-# Environment Variables
-.env
-*.env
-!.env.example
+# -----------------------------
+# Node / Vite
+# -----------------------------
+node_modules/
+.vite/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# -----------------------------
+# Misc tooling artifacts
+# -----------------------------
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+**/.vagrant/
+**/.sconsign.dblite
+**/.tags*
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Database
-*.sqlite3
-*.db
-
-# Compiled files
+# Compiled binaries
 *.com
 *.class
 *.dll
 *.exe
 *.o
-*.so
-
-# Node modules
-node_modules/
-
-# Vite cache
-.vite/
-
-# Claude temp files
-tmpclaude-* 
-*.bak
-*_new_views.py
-_fix.py
-update_urls.py
-update_views.py
-readmetheme.md
-convert-to-webp.js
+*.hprof
