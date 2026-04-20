@@ -98,7 +98,37 @@ class Project(models.Model):
     )
     md_gm_approved_at = models.DateTimeField(null=True, blank=True)
     md_gm_rejected_at = models.DateTimeField(null=True, blank=True)
-    
+
+    # Admin approval fields (for projects created without a submission)
+    ADMIN_APPROVAL_CHOICES = [
+        ('not_required', 'Not Required'),
+        ('not_submitted', 'Not Submitted'),
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+    admin_approval_status = models.CharField(
+        max_length=20,
+        choices=ADMIN_APPROVAL_CHOICES,
+        default='not_required',
+        help_text='Admin approval status for direct projects (created without a submission)'
+    )
+    admin_rejection_reason = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Reason for rejection by admin (if rejected)'
+    )
+    admin_approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='admin_approved_projects',
+        help_text='Admin who approved/rejected this project'
+    )
+    admin_approved_at = models.DateTimeField(null=True, blank=True)
+    admin_rejected_at = models.DateTimeField(null=True, blank=True)
+
     # Payment related fields
     estimated_value = models.DecimalField(
         max_digits=12,

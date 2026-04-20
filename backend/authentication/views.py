@@ -1909,9 +1909,7 @@ class AssignCoordinatorView(APIView):
         submission.coordinator_response = 'pending'
         submission.rejection_reason = None
         submission.responded_at = None
-        # Only change status to 'assigned' if not already approved
-        if submission.status != 'approved':
-            submission.status = 'assigned'
+        submission.status = 'assigned'
         submission.assigned_at = timezone.now()
         submission.save()
 

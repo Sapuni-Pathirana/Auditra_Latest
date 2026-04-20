@@ -14,7 +14,6 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import BlockIcon from '@mui/icons-material/Block';
 import HistoryIcon from '@mui/icons-material/History';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 
 export const roleMenuConfig = {
   admin: [
@@ -25,19 +24,17 @@ export const roleMenuConfig = {
     { label: 'Cancellation Requests', path: '/dashboard/cancellation-requests', icon: BlockIcon },
     { label: 'User Management', path: '/dashboard/users', icon: PeopleIcon },
     { label: 'Projects', path: '/dashboard/projects', icon: FolderIcon },
-    { label: 'Attendance Summary', path: '/dashboard/attendance-summary', icon: EventNoteIcon },
-    { label: 'Leave Management', path: '/dashboard/leave-management', icon: BeachAccessIcon },
-    { label: 'Payments', path: '/dashboard/payments', icon: PaymentIcon },
     { label: 'Removal Requests', path: '/dashboard/removal-requests', icon: PersonRemoveIcon },
     { label: 'System Logs', path: '/dashboard/system-logs', icon: HistoryIcon },
+    { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   hr_head: [
     { label: 'Dashboard', path: '/dashboard', icon: DashboardIcon },
     { label: 'Leave Management', path: '/dashboard/leave-management', icon: BeachAccessIcon },
     { label: 'Attendance Summary', path: '/dashboard/attendance-summary', icon: EventNoteIcon },
-    { label: 'Attendance View', path: '/dashboard/attendance-view', icon: VisibilityIcon },
     { label: 'Payments', path: '/dashboard/payments', icon: PaymentIcon },
     { label: 'Request Removal', path: '/dashboard/request-removal', icon: PersonRemoveIcon },
+    { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   coordinator: [
     { label: 'Dashboard', path: '/dashboard', icon: DashboardIcon },
@@ -45,24 +42,29 @@ export const roleMenuConfig = {
     { label: 'Projects', path: '/dashboard/projects', icon: FolderIcon },
     { label: 'Create Project', path: '/dashboard/projects/create', icon: AddCircleIcon },
     { label: 'My Leave', path: '/dashboard/my-leave', icon: BeachAccessIcon },
+    { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   accessor: [
     { label: 'Dashboard', path: '/dashboard', icon: DashboardIcon },
     { label: 'My Projects', path: '/dashboard/my-projects', icon: FolderIcon },
+    { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   senior_valuer: [
     { label: 'Dashboard', path: '/dashboard', icon: DashboardIcon },
     { label: 'My Projects', path: '/dashboard/sv-projects', icon: FolderIcon },
     { label: 'Valuation Review', path: '/dashboard/valuation-review', icon: RateReviewIcon },
+    { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   md_gm: [
     { label: 'Dashboard', path: '/dashboard', icon: DashboardIcon },
     { label: 'Project Approval', path: '/dashboard/project-approval', icon: ApprovalIcon },
     { label: 'Valuation Review', path: '/dashboard/md-gm-valuation-review', icon: RateReviewIcon },
+    { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   field_officer: [
     { label: 'Dashboard', path: '/dashboard', icon: DashboardIcon },
     { label: 'My Projects', path: '/dashboard/my-projects', icon: FolderIcon },
+    { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   general_employee: [
     { label: 'My Attendance', path: '/dashboard', icon: EventNoteIcon },
@@ -79,6 +81,7 @@ export const roleMenuConfig = {
     { label: 'My Projects', path: '/dashboard', icon: FolderIcon },
     { label: 'Payments', path: '/dashboard/agent-payments', icon: PaymentIcon },
     { label: 'Commission Reports', path: '/dashboard/agent-commission-reports', icon: ReceiptLongIcon },
+    { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   unassigned: [
     { label: 'Profile', path: '/dashboard', icon: PersonIcon },

@@ -129,16 +129,17 @@ class ProjectListView(generics.ListCreateAPIView):
         # Senior valuers see only assigned projects (pending, in_progress, completed)
         elif user_role == 'senior_valuer':
             queryset = Project.objects.filter(assigned_senior_valuer=user, status__in=['pending', 'in_progress', 'completed'])
-        
-        # Admins see all projects
-        elif user.is_staff or user.is_superuser:
+
+        # Admins and MD/GM see all projects
+        elif user_role in ('admin', 'md_gm') or user.is_staff or user.is_superuser:
             queryset = Project.objects.all()
         else:
             queryset = Project.objects.none()
-        
+
         # Optimize queryset with select_related and prefetch_related
         return queryset.select_related(
-            'coordinator', 'assigned_field_officer'
+            'coordinator', 'assigned_field_officer', 'assigned_client',
+            'assigned_agent', 'assigned_accessor', 'assigned_senior_valuer'
         ).prefetch_related(
             'documents', 'valuations__field_officer', 'valuations__photos', 'history'
         )
@@ -150,6 +151,12 @@ class ProjectListView(generics.ListCreateAPIView):
             raise serializers.ValidationError("Only coordinators can create projects.")
 
         project = serializer.save(coordinator=self.request.user)
+
+        # Determine if this project needs admin approval (created without a submission)
+        submission_id = self.request.data.get('submission_id', None)
+        if not submission_id:
+            project.admin_approval_status = 'not_submitted'
+            project.save(update_fields=['admin_approval_status'])
 
         # Record project creation in history
         ProjectStatusHistory.objects.create(
@@ -289,18 +296,18 @@ class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
             queryset = Project.objects.filter(assigned_accessor=user, status__in=['pending', 'in_progress', 'completed'])
         elif user_role == 'senior_valuer':
             queryset = Project.objects.filter(assigned_senior_valuer=user, status__in=['pending', 'in_progress', 'completed'])
-        elif user.is_staff or user.is_superuser:
+        elif user_role in ('admin', 'md_gm') or user.is_staff or user.is_superuser:
             queryset = Project.objects.all()
         else:
             queryset = Project.objects.none()
 
         return queryset.select_related(
-            'coordinator', 'assigned_field_officer', 'assigned_client', 
+            'coordinator', 'assigned_field_officer', 'assigned_client',
             'assigned_agent', 'assigned_accessor', 'assigned_senior_valuer'
         ).prefetch_related(
             'documents', 'valuations__field_officer', 'valuations__photos', 'history'
         )
-    
+
     def perform_update(self, serializer):
         # Only coordinators can update projects
         user_role = get_user_role(self.request.user)
@@ -1021,6 +1028,217 @@ def md_gm_reject_project(request, pk):
     }, status=status.HTTP_200_OK)
 
 
+@api_view(['POST'])
+@perm_classes([IsAuthenticated])
+def admin_approve_project(request, pk):
+    """Admin approves a direct project (created without a submission)"""
+    user_role = get_user_role(request.user)
+    if user_role != 'admin' and not request.user.is_staff:
+        return Response(
+            {'error': 'Only admins can approve direct projects'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        project = Project.objects.get(pk=pk)
+    except Project.DoesNotExist:
+        return Response(
+            {'error': 'Project not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if project.admin_approval_status != 'pending':
+        return Response(
+            {'error': f'Project admin approval is not pending (current: {project.admin_approval_status})'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    project.admin_approval_status = 'approved'
+    project.admin_approved_at = timezone.now()
+    project.admin_approved_by = request.user
+    project.admin_rejection_reason = None
+    project.save()
+
+    ProjectStatusHistory.objects.create(
+        project=project,
+        status=project.status,
+        notes="Admin approved direct project",
+        created_by=request.user
+    )
+
+    try:
+        from system_logs.utils import log_action, get_client_ip
+        log_action(
+            action='DIRECT_PROJECT_APPROVED',
+            user=request.user,
+            description=f"Direct project approved by admin: {project.title} (ID: {project.id})",
+            category='project',
+            ip_address=get_client_ip(request),
+            metadata={'project_id': project.id, 'project_title': project.title},
+        )
+    except Exception:
+        pass
+
+    return Response({
+        'message': 'Project approved successfully',
+        'project': ProjectSerializer(project, context={'request': request}).data
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@perm_classes([IsAuthenticated])
+def admin_reject_project(request, pk):
+    """Admin rejects a direct project (created without a submission)"""
+    user_role = get_user_role(request.user)
+    if user_role != 'admin' and not request.user.is_staff:
+        return Response(
+            {'error': 'Only admins can reject direct projects'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        project = Project.objects.get(pk=pk)
+    except Project.DoesNotExist:
+        return Response(
+            {'error': 'Project not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if project.admin_approval_status != 'pending':
+        return Response(
+            {'error': f'Project admin approval is not pending (current: {project.admin_approval_status})'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    reason = request.data.get('reason', '')
+    if not reason.strip():
+        return Response(
+            {'error': 'Rejection reason is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    project.admin_approval_status = 'rejected'
+    project.admin_rejected_at = timezone.now()
+    project.admin_approved_by = request.user
+    project.admin_rejection_reason = reason
+    project.save()
+
+    ProjectStatusHistory.objects.create(
+        project=project,
+        status=project.status,
+        notes=f"Admin rejected direct project. Reason: {reason}",
+        created_by=request.user
+    )
+
+    try:
+        from system_logs.utils import log_action, get_client_ip
+        log_action(
+            action='DIRECT_PROJECT_REJECTED',
+            user=request.user,
+            description=f"Direct project rejected by admin: {project.title} (ID: {project.id}). Reason: {reason}",
+            category='project',
+            ip_address=get_client_ip(request),
+            metadata={'project_id': project.id, 'project_title': project.title, 'reason': reason},
+        )
+    except Exception:
+        pass
+
+    return Response({
+        'message': 'Project rejected',
+        'project': ProjectSerializer(project, context={'request': request}).data
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@perm_classes([IsAuthenticated])
+def request_admin_approval(request, pk):
+    """Coordinator requests admin approval for a direct project"""
+    user_role = get_user_role(request.user)
+    if user_role != 'coordinator':
+        return Response(
+            {'error': 'Only coordinators can request admin approval'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        project = Project.objects.get(pk=pk, coordinator=request.user)
+    except Project.DoesNotExist:
+        return Response(
+            {'error': 'Project not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if project.admin_approval_status not in ('not_submitted', 'rejected'):
+        return Response(
+            {'error': f'Cannot request approval (current status: {project.admin_approval_status})'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    project.admin_approval_status = 'pending'
+    project.admin_rejection_reason = None
+    project.admin_rejected_at = None
+    project.save(update_fields=['admin_approval_status', 'admin_rejection_reason', 'admin_rejected_at'])
+
+    ProjectStatusHistory.objects.create(
+        project=project,
+        status=project.status,
+        notes="Coordinator requested admin approval for direct project",
+        created_by=request.user
+    )
+
+    try:
+        from system_logs.utils import log_action, get_client_ip
+        log_action(
+            action='ADMIN_APPROVAL_REQUESTED',
+            user=request.user,
+            description=f"Admin approval requested for project: {project.title} (ID: {project.id})",
+            category='project',
+            ip_address=get_client_ip(request),
+            metadata={'project_id': project.id, 'project_title': project.title},
+        )
+    except Exception:
+        pass
+
+    return Response({
+        'message': 'Admin approval request submitted successfully',
+        'project': ProjectSerializer(project, context={'request': request}).data
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@perm_classes([IsAuthenticated])
+def admin_pending_projects(request):
+    """Get projects requiring admin approval, with optional status filter"""
+    user_role = get_user_role(request.user)
+    if user_role != 'admin' and not request.user.is_staff:
+        return Response(
+            {'error': 'Only admins can view this'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    status_filter = request.query_params.get('status', 'all')
+
+    if status_filter in ('pending', 'approved', 'rejected'):
+        queryset = Project.objects.filter(admin_approval_status=status_filter)
+    else:
+        queryset = Project.objects.exclude(admin_approval_status__in=['not_required', 'not_submitted'])
+
+    queryset = queryset.select_related(
+        'coordinator', 'admin_approved_by'
+    ).order_by('-created_at')
+
+    serializer = ProjectSerializer(queryset, many=True, context={'request': request})
+    return Response({
+        'projects': serializer.data,
+        'summary': {
+            'total': Project.objects.exclude(admin_approval_status__in=['not_required', 'not_submitted']).count(),
+            'pending': Project.objects.filter(admin_approval_status='pending').count(),
+            'approved': Project.objects.filter(admin_approval_status='approved').count(),
+            'rejected': Project.objects.filter(admin_approval_status='rejected').count(),
+        },
+    }, status=status.HTTP_200_OK)
+
+
 class UserAssignedProjectsView(APIView):
     """Get projects assigned to a specific user"""
     permission_classes = [IsAuthenticated]
@@ -1269,19 +1487,20 @@ class ApprovePaymentView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Check if payment record exists
+        # Get or create payment record
         try:
             payment = project.payment
         except ProjectPayment.DoesNotExist:
-            return Response(
-                {'error': 'No payment record found for this project'},
-                status=status.HTTP_400_BAD_REQUEST
+            payment = ProjectPayment.objects.create(
+                project=project,
+                estimated_value=project.estimated_value or 0,
+                payment_status='pending'
             )
 
-        # Check if bank slip is submitted
-        if payment.payment_status != 'submitted':
+        # Allow approval from pending, requested, or submitted status
+        if payment.payment_status == 'approved':
             return Response(
-                {'error': f'Cannot approve payment (current status: {payment.payment_status})'},
+                {'error': 'Payment is already approved'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -1486,6 +1705,26 @@ class StartProjectView(APIView):
                 {'error': 'Cannot start a completed project'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Validate admin approval for direct projects
+        if project.admin_approval_status == 'not_submitted':
+            return Response({
+                'error': 'Please request admin approval before starting this project',
+                'admin_approval_status': project.admin_approval_status,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if project.admin_approval_status == 'pending':
+            return Response({
+                'error': 'Admin approval is required before starting this project',
+                'admin_approval_status': project.admin_approval_status,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if project.admin_approval_status == 'rejected':
+            return Response({
+                'error': 'This project was rejected by admin and cannot be started',
+                'admin_approval_status': project.admin_approval_status,
+                'admin_rejection_reason': project.admin_rejection_reason,
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         # Validate payment
         try:

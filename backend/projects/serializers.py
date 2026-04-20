@@ -193,7 +193,8 @@ class ProjectSerializer(serializers.ModelSerializer):
     valuations_count = serializers.SerializerMethodField()
     history = ProjectStatusHistorySerializer(many=True, read_only=True)
     payment = ProjectPaymentSerializer(read_only=True)
-    
+    admin_approved_by_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Project
         fields = (
@@ -208,6 +209,8 @@ class ProjectSerializer(serializers.ModelSerializer):
             'assigned_senior_valuer_email', 'has_agent', 'client_info', 'agent_info',
             'status', 'status_display', 'priority', 'start_date', 'end_date', 'estimated_value',
             'documents', 'documents_count', 'valuations', 'valuations_count', 'history', 'payment',
+            'admin_approval_status', 'admin_rejection_reason', 'admin_approved_by',
+            'admin_approved_by_name', 'admin_approved_at', 'admin_rejected_at',
             'created_at', 'updated_at'
         )
         read_only_fields = ('coordinator', 'created_at', 'updated_at')
@@ -264,6 +267,12 @@ class ProjectSerializer(serializers.ModelSerializer):
         """Get count of valuations for this project"""
         return obj.valuations.count()
 
+    def get_admin_approved_by_name(self, obj):
+        if obj.admin_approved_by:
+            name = f"{obj.admin_approved_by.first_name} {obj.admin_approved_by.last_name}".strip()
+            return name or obj.admin_approved_by.username
+        return None
+
 
 class ProjectCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating projects"""
@@ -279,7 +288,7 @@ class ProjectCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Project
-        fields = ('title', 'description', 'start_date', 'end_date', 'has_agent', 'priority', 'client_info', 'agent_info', 'submission_id', 'estimated_value')
+        fields = ('id', 'title', 'description', 'start_date', 'end_date', 'has_agent', 'priority', 'client_info', 'agent_info', 'submission_id', 'estimated_value')
         extra_kwargs = {
             'title': {'required': True},
             'description': {'required': False, 'allow_blank': True},

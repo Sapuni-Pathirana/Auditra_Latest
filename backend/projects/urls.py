@@ -22,6 +22,11 @@ urlpatterns = [
     path('documents/<int:pk>/', views.ProjectDocumentDeleteView.as_view(), name='project-document-delete'),
     path('<int:pk>/md-gm-approve/', views.md_gm_approve_project, name='md-gm-approve-project'),
     path('<int:pk>/md-gm-reject/', views.md_gm_reject_project, name='md-gm-reject-project'),
+    # Admin approval endpoints (for direct projects without submission)
+    path('<int:pk>/admin-approve/', views.admin_approve_project, name='admin-approve-project'),
+    path('<int:pk>/admin-reject/', views.admin_reject_project, name='admin-reject-project'),
+    path('<int:pk>/request-admin-approval/', views.request_admin_approval, name='request-admin-approval'),
+    path('admin-pending-projects/', views.admin_pending_projects, name='admin-pending-projects'),
     # Payment workflow endpoints
     path('<int:project_id>/send-payment-request/', views.SendPaymentRequestView.as_view(), name='send-payment-request'),
     path('<int:project_id>/upload-bank-slip/', views.UploadBankSlipView.as_view(), name='upload-bank-slip'),
