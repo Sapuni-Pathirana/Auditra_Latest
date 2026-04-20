@@ -35,7 +35,7 @@ class UserRole(models.Model):
         'accessor': 110000,
         'senior_valuer': 120000,
         'md_gm': 100000,
-        'hr_head': 0,  # HR Head does not receive payment slips
+        'hr_head': 80000,
         'general_employee': 50000,
         'agent': 60000,
         'client': 0,  # Clients don't have salaries
