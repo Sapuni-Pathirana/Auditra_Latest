@@ -142,7 +142,7 @@ export default function AssignedSubmissions() {
       const allData = countRes.data.results || [];
       setSummaryCounts({
         all: countRes.data.count || 0,
-        pending: allData.filter(s => s.coordinator_response === 'pending' && s.status === 'assigned').length,
+        pending: allData.filter(s => s.coordinator_response === 'pending').length,
         accepted: allData.filter(s => s.coordinator_response === 'accepted').length,
         rejected: allData.filter(s => s.coordinator_response === 'rejected').length,
       });

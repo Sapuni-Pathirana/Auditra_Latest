@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, PersonAdd, PlayArrow, CheckCircle, Cancel, Lock, Edit,
-  Timeline as TimelineIcon, Update, Description, Download, Delete,
+  Timeline as TimelineIcon, Update, Description, Download, Delete, Visibility,
   EventNote, AssignmentInd, FactCheck, Payment, Send, Receipt,
   HourglassEmpty, AttachMoney, AssignmentTurnedIn, Block, AttachFile
 } from '@mui/icons-material';
@@ -60,6 +60,9 @@ export default function ProjectDetail() {
   // Document management states
   const [docUploading, setDocUploading] = useState(false);
   const [deletingDocId, setDeletingDocId] = useState(null);
+
+  // Admin approval request state
+  const [approvalRequestLoading, setApprovalRequestLoading] = useState(false);
 
   const fetchProject = async () => {
     try {
@@ -343,6 +346,21 @@ export default function ProjectDetail() {
     }
   };
 
+  // Admin approval request handler
+  const handleRequestAdminApproval = async () => {
+    setApprovalRequestLoading(true);
+    setError('');
+    try {
+      await projectService.requestAdminApproval(id);
+      setSuccess('Admin approval request sent successfully!');
+      await fetchProject();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send approval request');
+    } finally {
+      setApprovalRequestLoading(false);
+    }
+  };
+
   const formatFileSize = (bytes) => {
     if (!bytes) return '-';
     if (bytes < 1024) return `${bytes} B`;
@@ -374,7 +392,8 @@ export default function ProjectDetail() {
     requiredAssignments.splice(2, 0, { label: 'Agent', assigned: !!project.assigned_agent });
   }
   const allAssigned = requiredAssignments.every(r => r.assigned);
-  const canStartProject = allAssigned && isPaymentApproved;
+  const isAdminApproved = project.admin_approval_status === 'not_required' || project.admin_approval_status === 'approved';
+  const canStartProject = allAssigned && isPaymentApproved && isAdminApproved;
 
   return (
     <Box>
@@ -400,6 +419,71 @@ export default function ProjectDetail() {
         </Alert>
       )}
 
+      {/* Admin Approval Status Alerts */}
+      {project.admin_approval_status === 'not_submitted' && isCoordinator && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Admin Approval Required</Typography>
+              <Typography variant="body2">
+                This project requires admin approval before it can be started. Click the button to send your request.
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<Send />}
+              onClick={handleRequestAdminApproval}
+              disabled={approvalRequestLoading}
+              sx={{ ml: 3, whiteSpace: 'nowrap', fontWeight: 600, minWidth: 'fit-content' }}
+            >
+              {approvalRequestLoading ? 'Sending...' : 'Request Approval'}
+            </Button>
+          </Box>
+        </Alert>
+      )}
+      {project.admin_approval_status === 'pending' && (
+        <Alert severity="warning" sx={{ mb: 2 }} icon={<HourglassEmpty />}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Admin Approval Pending</Typography>
+          <Typography variant="body2">
+            Your approval request has been sent and is awaiting admin review.
+          </Typography>
+        </Alert>
+      )}
+      {project.admin_approval_status === 'rejected' && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Admin Approval Rejected</Typography>
+              <Typography variant="body2">
+                Reason: {project.admin_rejection_reason || 'No reason provided'}
+              </Typography>
+            </Box>
+            {isCoordinator && (
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                startIcon={<Send />}
+                onClick={handleRequestAdminApproval}
+                disabled={approvalRequestLoading}
+                sx={{ ml: 2, whiteSpace: 'nowrap', fontWeight: 600 }}
+              >
+                {approvalRequestLoading ? 'Sending...' : 'Resubmit'}
+              </Button>
+            )}
+          </Box>
+        </Alert>
+      )}
+      {project.admin_approval_status === 'approved' && (
+        <Alert severity="success" sx={{ mb: 2 }} icon={<CheckCircle />}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Admin Approved</Typography>
+          <Typography variant="body2">
+            This project has been approved by the admin.
+          </Typography>
+        </Alert>
+      )}
+
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
@@ -407,7 +491,7 @@ export default function ProjectDetail() {
               <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>{project.title}</Typography>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <StatusChip status={project.status} label={project.status_display || project.status} />
-                <Chip label={capitalize(project.priority)} size="small" sx={{ bgcolor: `${getPriorityColor(project.priority)}20`, color: getPriorityColor(project.priority), fontWeight: 600, width: 90, justifyContent: 'center', border: `1px solid ${getPriorityColor(project.priority)}50` }} />
+                <Chip label={capitalize(project.priority)} size="small" sx={{ bgcolor: `${getPriorityColor(project.priority)}20`, color: getPriorityColor(project.priority), fontWeight: 600, width: 110, justifyContent: 'center', border: `1px solid ${getPriorityColor(project.priority)}50` }} />
               </Box>
             </Box>
             {isCoordinator && (
@@ -452,7 +536,7 @@ export default function ProjectDetail() {
                     </Select>
                   </FormControl>
                 )}
-                {/* Cancel Project Button - always available unless cancelled or has pending request */}
+                {/* Cancel Project Button */}
                 {project.status !== 'cancelled' && (!cancellationStatus?.has_request || cancellationStatus?.request?.status === 'rejected') && (
                   <Button
                     variant="outlined"
@@ -507,8 +591,8 @@ export default function ProjectDetail() {
                 <AssignmentTurnedIn color="primary" />
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>Project Requirements</Typography>
               </Box>
-              <Chip 
-                label={`${requiredAssignments.filter(r => r.assigned).length + (isPaymentApproved ? 1 : 0)}/${requiredAssignments.length + 1}`}
+              <Chip
+                label={`${requiredAssignments.filter(r => r.assigned).length + (isPaymentApproved ? 1 : 0) + (project.admin_approval_status !== 'not_required' && isAdminApproved ? 1 : 0)}/${requiredAssignments.length + 1 + (project.admin_approval_status !== 'not_required' ? 1 : 0)}`}
                 size="small"
                 color={canStartProject ? 'success' : 'default'}
                 sx={{ fontWeight: 600 }}
@@ -516,7 +600,7 @@ export default function ProjectDetail() {
             </Box>
             
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-              {[...requiredAssignments, { label: 'Payment', assigned: isPaymentApproved }].map(({ label, assigned }) => (
+              {[...requiredAssignments, { label: 'Payment', assigned: isPaymentApproved }, ...(project.admin_approval_status !== 'not_required' ? [{ label: 'Admin Approval', assigned: isAdminApproved }] : [])].map(({ label, assigned }) => (
                 <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   {assigned ? (
                     <CheckCircle sx={{ fontSize: 20, color: 'success.main' }} />
@@ -558,10 +642,10 @@ export default function ProjectDetail() {
                 Rs. {Number(project.estimated_value || 50000).toLocaleString()}
               </Typography>
             </Box>
-            
+
             {/* Status Steps */}
-            <Box sx={{ 
-              display: 'flex', 
+            <Box sx={{
+              display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               p: 2,
@@ -575,18 +659,18 @@ export default function ProjectDetail() {
                 { key: 'verification', label: 'Verification', done: paymentStatus === 'approved' },
                 { key: 'completed', label: 'Completed', done: paymentStatus === 'approved' }
               ].map((step, index, arr) => (
-                <Box 
+                <Box
                   key={step.key}
-                  sx={{ 
+                  sx={{
                     display: 'flex',
                     alignItems: 'center',
                     flex: 1
                   }}
                 >
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 70 }}>
-                    <Box sx={{ 
-                      width: 24, 
-                      height: 24, 
+                    <Box sx={{
+                      width: 24,
+                      height: 24,
                       borderRadius: '50%',
                       bgcolor: step.done ? 'success.main' : 'grey.300',
                       display: 'flex',
@@ -610,7 +694,7 @@ export default function ProjectDetail() {
                 </Box>
               ))}
             </Box>
-            
+
             {/* Status and Actions */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -618,7 +702,7 @@ export default function ProjectDetail() {
                   width: 8,
                   height: 8,
                   borderRadius: '50%',
-                  bgcolor: 
+                  bgcolor:
                     paymentStatus === 'approved' ? 'success.main' :
                     paymentStatus === 'rejected' ? 'error.main' :
                     paymentStatus === 'submitted' || paymentStatus === 'under_review' ? 'info.main' :
@@ -633,20 +717,45 @@ export default function ProjectDetail() {
                    paymentStatus === 'rejected' ? 'Payment verification failed' : 'Unknown status'}
                 </Typography>
               </Box>
-              
+
               {paymentStatus === 'pending' && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<Send />}
+                    onClick={handleSendPaymentRequest}
+                    disabled={paymentLoading || !project.assigned_client}
+                    size="small"
+                  >
+                    {paymentLoading ? 'Sending...' : 'Send Request'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<CheckCircle />}
+                    onClick={handleApprovePayment}
+                    disabled={paymentLoading}
+                    size="small"
+                    color="success"
+                  >
+                    {paymentLoading ? 'Processing...' : 'Mark as Paid'}
+                  </Button>
+                </Box>
+              )}
+
+              {paymentStatus === 'requested' && (
                 <Button
-                  variant="contained"
-                  startIcon={<Send />}
-                  onClick={handleSendPaymentRequest}
-                  disabled={paymentLoading || !project.assigned_client}
+                  variant="outlined"
+                  startIcon={<CheckCircle />}
+                  onClick={handleApprovePayment}
+                  disabled={paymentLoading}
                   size="small"
+                  color="success"
                   sx={{ alignSelf: 'flex-start' }}
                 >
-                  {paymentLoading ? 'Sending...' : 'Send Request'}
+                  {paymentLoading ? 'Processing...' : 'Mark as Paid'}
                 </Button>
               )}
-              
+
               {(paymentStatus === 'submitted' || paymentStatus === 'under_review') && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
                   {payment?.bank_slip_url && (
@@ -683,13 +792,13 @@ export default function ProjectDetail() {
                 </Box>
               )}
             </Box>
-            
+
             {!project.assigned_client && paymentStatus === 'pending' && (
               <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 2 }}>
                 Please assign a client before sending payment request.
               </Typography>
             )}
-            
+
             {payment?.rejection_reason && paymentStatus === 'rejected' && (
               <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 2 }}>
                 Reason: {payment.rejection_reason}
@@ -808,12 +917,12 @@ export default function ProjectDetail() {
                 ))}
               </Box>
             </Grid>
-            {/* Second column: Client, Agent */}
+            {/* Second column: Client, Agent (if applicable) */}
             <Grid item xs={12} sm={6}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {[
                   { label: 'Client', key: 'assigned_client', type: 'client', nameKey: 'assigned_client_name' },
-                  { label: 'Agent', key: 'assigned_agent', type: 'agent', nameKey: 'assigned_agent_name' },
+                  ...(project.has_agent ? [{ label: 'Agent', key: 'assigned_agent', type: 'agent', nameKey: 'assigned_agent_name' }] : []),
                 ].map(({ label, key, type, nameKey }) => (
                   <Box key={key} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: (t) => t.palette.custom.cardInner, borderRadius: 2 }}>
                     <Box>
@@ -955,9 +1064,9 @@ export default function ProjectDetail() {
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                    <Tooltip title="Download">
+                    <Tooltip title="View">
                       <IconButton size="small" href={doc.file_url} target="_blank" component="a">
-                        <Download fontSize="small" />
+                        <Visibility fontSize="small" />
                       </IconButton>
                     </Tooltip>
                     {isCoordinator && (

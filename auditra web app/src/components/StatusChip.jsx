@@ -9,12 +9,13 @@ export default function StatusChip({ status, label }) {
       size="small"
       sx={{
         bgcolor: `${color}15`,
-        bgcolor: `${color}15`,
         color: color,
         fontWeight: 600,
         textTransform: 'capitalize',
         fontSize: 12,
         border: `1px solid ${color}50`,
+        width: 110,
+        justifyContent: 'center',
       }}
     />
   );

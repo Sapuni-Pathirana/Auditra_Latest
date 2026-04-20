@@ -7,7 +7,7 @@ export const getStatusColor = (status) => {
     completed: '#1565C0',
     cancelled: '#0D47A1',
     approved: '#1565C0',
-    rejected: '#0D47A1',
+    rejected: '#D32F2F',
     submitted: '#1565C0',
     reviewed: '#0D47A1',
     accepted: '#1565C0',

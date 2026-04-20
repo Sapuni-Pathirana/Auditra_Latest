@@ -144,7 +144,7 @@ export default function ValuationReview() {
                     <StatusChip status={val.status} label={val.status} />
                   </TableCell>
                   <TableCell align="right">
-                    <Button size="small" startIcon={<Visibility />}
+                    <Button size="small" startIcon={<Visibility />} sx={{ width: 110 }}
                       onClick={() => { setDetailDialog({ open: true, valuation: val }); setRemarks(''); }}>
                       Review
                     </Button>
@@ -231,14 +231,14 @@ export default function ValuationReview() {
                 onClick={() => handleReject(detailDialog.valuation.id)}>
                 Reject
               </Button>
-              <Button color="primary" variant="contained" startIcon={<Send />}
+              <Button color="primary" variant="outlined" startIcon={<Send />} sx={{ width: 110 }}
                 disabled={actionLoading}
                 onClick={() => handleApproveAndSend(detailDialog.valuation.id)}>
                 Approve & Send to MD/GM
               </Button>
             </>
           )}
-          <Button onClick={() => setDetailDialog({ open: false, valuation: null })}>Close</Button>
+          <Button sx={{ width: 110 }} onClick={() => setDetailDialog({ open: false, valuation: null })}>Close</Button>
         </DialogActions>
       </Dialog>
 

@@ -148,7 +148,7 @@ export default function MDGMValuationReview() {
                     <StatusChip status={val.status === 'md_approved' ? 'approved' : val.status} label={getStatusLabel(val.status)} />
                   </TableCell>
                   <TableCell align="right">
-                    <Button size="small" startIcon={<Visibility />}
+                    <Button size="small" startIcon={<Visibility />} sx={{ width: 110 }}
                       onClick={() => { setDetailDialog({ open: true, valuation: val }); setRemarks(''); }}>
                       Review
                     </Button>
@@ -278,14 +278,14 @@ export default function MDGMValuationReview() {
                 onClick={() => handleReject(detailDialog.valuation.id)}>
                 Reject
               </Button>
-              <Button color="primary" variant="contained" startIcon={<CheckCircle />} sx={{ width: 110 }}
+              <Button color="primary" variant="outlined" startIcon={<CheckCircle />} sx={{ width: 110 }}
                 disabled={actionLoading}
                 onClick={() => handleApprove(detailDialog.valuation.id)}>
                 Approve
               </Button>
             </>
           )}
-          <Button onClick={() => setDetailDialog({ open: false, valuation: null })}>Close</Button>
+          <Button sx={{ width: 110 }} onClick={() => setDetailDialog({ open: false, valuation: null })}>Close</Button>
         </DialogActions>
       </Dialog>
 

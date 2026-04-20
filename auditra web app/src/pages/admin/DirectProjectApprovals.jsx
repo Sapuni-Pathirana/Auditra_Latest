@@ -11,11 +11,8 @@ import {
 import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
-import { formatDateTime } from '../../utils/helpers';
+import { formatDateTime, formatDate, formatCurrency, capitalize } from '../../utils/helpers';
 
-/* ------------------------------------------------------------------ */
-/*  Detail field helper                                               */
-/* ------------------------------------------------------------------ */
 const DetailField = ({ label, value }) => (
   <Box sx={{ mb: 2.5 }}>
     <Typography
@@ -38,47 +35,35 @@ const DetailField = ({ label, value }) => (
   </Box>
 );
 
-export default function CancellationRequests() {
-  const [requests, setRequests] = useState([]);
+export default function DirectProjectApprovals() {
+  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [tab, setTab] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [summary, setSummary] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
 
-  // Dialog states (keep approve/reject dialogs since they need input)
   const [approveDialog, setApproveDialog] = useState(null);
   const [rejectDialog, setRejectDialog] = useState(null);
   const [adminRemarks, setAdminRemarks] = useState('');
 
-  // All requests for counts
-  const [allRequests, setAllRequests] = useState([]);
-
-  const fetchAllRequests = async () => {
+  const fetchProjects = async () => {
     setLoading(true);
     try {
-      const [pendingRes, approvedRes, rejectedRes] = await Promise.all([
-        projectService.getCancellationRequests('pending'),
-        projectService.getCancellationRequests('approved'),
-        projectService.getCancellationRequests('rejected'),
-      ]);
-      const all = [
-        ...(pendingRes.data.requests || []),
-        ...(approvedRes.data.requests || []),
-        ...(rejectedRes.data.requests || []),
-      ];
-      setAllRequests(all);
-      setRequests(all);
+      const res = await projectService.getAdminPendingProjects('all');
+      setProjects(res.data.projects || []);
+      setSummary(res.data.summary || { total: 0, pending: 0, approved: 0, rejected: 0 });
     } catch {
-      setError('Failed to load cancellation requests');
+      setError('Failed to load projects');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAllRequests();
+    fetchProjects();
   }, []);
 
   const handleApprove = async () => {
@@ -86,13 +71,13 @@ export default function CancellationRequests() {
     setProcessing(true);
     setError('');
     try {
-      await projectService.approveCancellation(approveDialog.id, adminRemarks);
-      setSuccess('Cancellation approved. Project has been cancelled and team notified.');
+      await projectService.adminApprove(approveDialog.id);
+      setSuccess('Project approved successfully.');
       setApproveDialog(null);
       setAdminRemarks('');
-      fetchAllRequests();
+      fetchProjects();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to approve cancellation');
+      setError(err.response?.data?.error || 'Failed to approve project');
     } finally {
       setProcessing(false);
     }
@@ -100,19 +85,19 @@ export default function CancellationRequests() {
 
   const handleReject = async () => {
     if (!rejectDialog || !adminRemarks.trim()) {
-      setError('Please provide remarks for rejection');
+      setError('Please provide a reason for rejection');
       return;
     }
     setProcessing(true);
     setError('');
     try {
-      await projectService.rejectCancellation(rejectDialog.id, adminRemarks);
-      setSuccess('Cancellation request rejected. Coordinator has been notified.');
+      await projectService.adminReject(rejectDialog.id, adminRemarks);
+      setSuccess('Project rejected. Coordinator has been notified.');
       setRejectDialog(null);
       setAdminRemarks('');
-      fetchAllRequests();
+      fetchProjects();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to reject cancellation');
+      setError(err.response?.data?.error || 'Failed to reject project');
     } finally {
       setProcessing(false);
     }
@@ -122,30 +107,29 @@ export default function CancellationRequests() {
     setExpandedRow((prev) => (prev === id ? null : id));
   };
 
-  const pendingCount = allRequests.filter(r => r.status === 'pending').length;
-  const approvedCount = allRequests.filter(r => r.status === 'approved').length;
-  const rejectedCount = allRequests.filter(r => r.status === 'rejected').length;
-
-  const filtered = tab === 0 ? allRequests :
-    tab === 1 ? allRequests.filter(r => r.status === 'pending') :
-    tab === 2 ? allRequests.filter(r => r.status === 'approved') :
-    allRequests.filter(r => r.status === 'rejected');
+  const filtered = tab === 0 ? projects :
+    tab === 1 ? projects.filter(p => p.admin_approval_status === 'pending') :
+    tab === 2 ? projects.filter(p => p.admin_approval_status === 'approved') :
+    projects.filter(p => p.admin_approval_status === 'rejected');
 
   if (loading) return <LoadingSpinner />;
 
-  const colCount = 7;
+  const colCount = 8;
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Cancellation Requests</Typography>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>Direct Project Approvals</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Review projects created directly by coordinators (without a client submission)
+      </Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label={`All (${allRequests.length})`} />
-        <Tab label={`Pending (${pendingCount})`} />
-        <Tab label={`Approved (${approvedCount})`} />
-        <Tab label={`Rejected (${rejectedCount})`} />
+        <Tab label={`All (${summary.total})`} />
+        <Tab label={`Pending (${summary.pending})`} />
+        <Tab label={`Approved (${summary.approved})`} />
+        <Tab label={`Rejected (${summary.rejected})`} />
       </Tabs>
 
       <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
@@ -153,51 +137,57 @@ export default function CancellationRequests() {
           <TableHead>
             <TableRow sx={{ bgcolor: (t) => t.palette.custom?.tableHeader || '#F1F5F9' }}>
               <TableCell sx={{ width: 48 }} />
-              <TableCell sx={{ fontWeight: 700 }}>Project</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Project Title</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Coordinator</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Reason</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Requested</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Priority</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Est. Value</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Created</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
               <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>No cancellation requests</TableCell></TableRow>
+              <TableRow><TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>No projects found</TableCell></TableRow>
             ) : (
-              filtered.map((request) => {
-                const isExpanded = expandedRow === request.id;
+              filtered.map((project) => {
+                const isExpanded = expandedRow === project.id;
 
                 return (
-                  <Fragment key={request.id}>
-                    {/* Main Row */}
+                  <Fragment key={project.id}>
                     <TableRow
                       hover
                       sx={{ '& > *': { borderBottom: 'unset' } }}
                     >
                       <TableCell sx={{ width: 48 }}>
-                        <IconButton size="small" onClick={() => handleToggleExpand(request.id)}>
+                        <IconButton size="small" onClick={() => handleToggleExpand(project.id)}>
                           {isExpanded ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
                         </IconButton>
                       </TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>{request.project_title}</TableCell>
-                      <TableCell>{request.coordinator_name}</TableCell>
-                      <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {request.reason}
+                      <TableCell sx={{ fontWeight: 600 }}>{project.title}</TableCell>
+                      <TableCell>{project.coordinator_name}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={capitalize(project.priority) || 'Normal'}
+                          size="small"
+                          color={project.priority === 'high' ? 'error' : project.priority === 'medium' ? 'warning' : 'default'}
+                          sx={{ width: 110, justifyContent: 'center' }}
+                        />
                       </TableCell>
+                      <TableCell>{formatCurrency(project.estimated_value)}</TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap', fontSize: '0.85rem' }}>
-                        {formatDateTime(request.created_at)}
+                        {formatDateTime(project.created_at)}
                       </TableCell>
-                      <TableCell><StatusChip status={request.status} /></TableCell>
+                      <TableCell><StatusChip status={project.admin_approval_status} /></TableCell>
                       <TableCell sx={{ textAlign: 'center' }}>
-                        {request.status === 'pending' ? (
+                        {project.admin_approval_status === 'pending' ? (
                           <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
                             <Button
                               size="small"
                               variant="outlined"
                               color="primary"
                               startIcon={<Check />}
-                              onClick={() => { setAdminRemarks(''); setApproveDialog(request); }}
+                              onClick={() => { setAdminRemarks(''); setApproveDialog(project); }}
                               sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', width: 110 }}
                             >
                               Approve
@@ -207,7 +197,7 @@ export default function CancellationRequests() {
                               variant="outlined"
                               color="error"
                               startIcon={<Close />}
-                              onClick={() => { setAdminRemarks(''); setRejectDialog(request); }}
+                              onClick={() => { setAdminRemarks(''); setRejectDialog(project); }}
                               sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', width: 110 }}
                             >
                               Reject
@@ -219,7 +209,6 @@ export default function CancellationRequests() {
                       </TableCell>
                     </TableRow>
 
-                    {/* Expandable Detail Row */}
                     <TableRow>
                       <TableCell
                         colSpan={colCount}
@@ -228,62 +217,34 @@ export default function CancellationRequests() {
                         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                           <Box sx={{ py: 3, px: 3, bgcolor: (t) => t.palette.custom?.cardInner || '#FAFBFC' }}>
                             <Grid container spacing={4}>
-                              {/* Request Information */}
                               <Grid item xs={12} md={3}>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main', mb: 2 }}>
-                                  Project Information
+                                  Project Details
                                 </Typography>
-                                <DetailField label="Project" value={request.project_title} />
-                                <DetailField label="Project Status" value={request.project_status} />
+                                <DetailField label="Title" value={project.title} />
+                                <DetailField label="Description" value={project.description} />
+                                <DetailField label="Priority" value={capitalize(project.priority)} />
                               </Grid>
 
-                              {/* Requester Information */}
                               <Grid item xs={12} md={3}>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main', mb: 2 }}>
-                                  Requester Details
+                                  Dates & Value
                                 </Typography>
-                                <DetailField label="Requested By" value={request.coordinator_name} />
-                                <DetailField label="Request Date" value={formatDateTime(request.created_at)} />
+                                <DetailField label="Start Date" value={formatDate(project.start_date)} />
+                                <DetailField label="End Date" value={formatDate(project.end_date)} />
+                                <DetailField label="Estimated Value" value={formatCurrency(project.estimated_value)} />
                               </Grid>
 
-                              {/* Reason */}
                               <Grid item xs={12} md={3}>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main', mb: 2 }}>
-                                  Cancellation Details
+                                  Client Information
                                 </Typography>
-                                <Box sx={{ mb: 2 }}>
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      color: 'text.secondary',
-                                      fontWeight: 600,
-                                      display: 'block',
-                                      mb: 0.5,
-                                      textTransform: 'uppercase',
-                                      fontSize: '0.65rem',
-                                      letterSpacing: '0.8px'
-                                    }}
-                                  >
-                                    Reason for Cancellation
-                                  </Typography>
-                                  <Typography
-                                    variant="body1"
-                                    sx={{
-                                      fontWeight: 500,
-                                      fontSize: '0.95rem',
-                                      bgcolor: 'background.paper',
-                                      p: 1.5,
-                                      borderRadius: 1,
-                                      border: '1px solid',
-                                      borderColor: 'divider',
-                                    }}
-                                  >
-                                    {request.reason || '-'}
-                                  </Typography>
-                                </Box>
+                                <DetailField label="Client Name" value={project.client_info?.name} />
+                                <DetailField label="Client Email" value={project.client_info?.email} />
+                                <DetailField label="Client Phone" value={project.client_info?.phone} />
+                                <DetailField label="Company" value={project.client_info?.company} />
                               </Grid>
 
-                              {/* Status & Review */}
                               <Grid item xs={12} md={3}>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main', mb: 2 }}>
                                   Review Status
@@ -303,13 +264,16 @@ export default function CancellationRequests() {
                                   >
                                     Status
                                   </Typography>
-                                  <StatusChip status={request.status} />
+                                  <StatusChip status={project.admin_approval_status} />
                                 </Box>
-                                {request.status !== 'pending' && (
+                                {project.admin_approval_status !== 'pending' && (
                                   <>
-                                    <DetailField label="Reviewed By" value={request.reviewed_by_name} />
-                                    <DetailField label="Review Date" value={request.reviewed_at ? formatDateTime(request.reviewed_at) : '-'} />
-                                    {request.admin_remarks && (
+                                    <DetailField label="Reviewed By" value={project.admin_approved_by_name} />
+                                    <DetailField label="Review Date" value={
+                                      project.admin_approved_at ? formatDateTime(project.admin_approved_at) :
+                                      project.admin_rejected_at ? formatDateTime(project.admin_rejected_at) : '-'
+                                    } />
+                                    {project.admin_rejection_reason && (
                                       <Box sx={{ mb: 2 }}>
                                         <Typography
                                           variant="caption"
@@ -323,7 +287,7 @@ export default function CancellationRequests() {
                                             letterSpacing: '0.8px'
                                           }}
                                         >
-                                          Admin Remarks
+                                          Rejection Reason
                                         </Typography>
                                         <Typography
                                           variant="body1"
@@ -337,7 +301,7 @@ export default function CancellationRequests() {
                                             borderColor: 'divider',
                                           }}
                                         >
-                                          {request.admin_remarks}
+                                          {project.admin_rejection_reason}
                                         </Typography>
                                       </Box>
                                     )}
@@ -345,7 +309,6 @@ export default function CancellationRequests() {
                                 )}
                               </Grid>
                             </Grid>
-
                           </Box>
                         </Collapse>
                       </TableCell>
@@ -360,15 +323,13 @@ export default function CancellationRequests() {
 
       {/* Approve Dialog */}
       <Dialog open={!!approveDialog} onClose={() => !processing && setApproveDialog(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: 'primary.main' }}>Approve Cancellation</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: 'primary.main' }}>Approve Project</DialogTitle>
         {approveDialog && (
           <DialogContent>
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              This will cancel the project "{approveDialog.project_title}" and notify all assigned team members.
+            <Alert severity="info" sx={{ mb: 2 }}>
+              This will approve the direct project "{approveDialog.title}" created by {approveDialog.coordinator_name}.
+              The coordinator will be able to proceed with the project workflow.
             </Alert>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              <strong>Reason:</strong> {approveDialog.reason}
-            </Typography>
             <TextField
               fullWidth
               multiline
@@ -390,21 +351,21 @@ export default function CancellationRequests() {
 
       {/* Reject Dialog */}
       <Dialog open={!!rejectDialog} onClose={() => !processing && setRejectDialog(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>Reject Cancellation Request</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>Reject Project</DialogTitle>
         {rejectDialog && (
           <DialogContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Please provide a reason for rejecting this cancellation request. The coordinator will be notified.
+              Please provide a reason for rejecting this project. The coordinator will be notified.
             </Typography>
             <Typography variant="body2" sx={{ mb: 2 }}>
-              <strong>Original Reason:</strong> {rejectDialog.reason}
+              <strong>Project:</strong> {rejectDialog.title} by {rejectDialog.coordinator_name}
             </Typography>
             <TextField
               fullWidth
               multiline
               rows={3}
-              label="Rejection Remarks"
-              placeholder="Please explain why the cancellation request is being rejected..."
+              label="Rejection Reason"
+              placeholder="Please explain why this project is being rejected..."
               value={adminRemarks}
               onChange={(e) => setAdminRemarks(e.target.value)}
               required

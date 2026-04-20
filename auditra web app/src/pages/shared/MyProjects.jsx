@@ -70,7 +70,7 @@ export default function MyProjects() {
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                     <Folder color="primary" />
-                    <Chip label={capitalize(p.priority)} size="small" sx={{ bgcolor: `${getPriorityColor(p.priority)}20`, color: getPriorityColor(p.priority), fontWeight: 600, fontSize: 11, width: 90, justifyContent: 'center', border: `1px solid ${getPriorityColor(p.priority)}50` }} />
+                    <Chip label={capitalize(p.priority)} size="small" sx={{ bgcolor: `${getPriorityColor(p.priority)}20`, color: getPriorityColor(p.priority), fontWeight: 600, fontSize: 11, width: 110, justifyContent: 'center', border: `1px solid ${getPriorityColor(p.priority)}50` }} />
                   </Box>
                   <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>{p.title}</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>

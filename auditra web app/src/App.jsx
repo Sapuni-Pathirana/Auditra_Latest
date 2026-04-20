@@ -21,6 +21,7 @@ import SystemLogs from './pages/admin/SystemLogs';
 import ClientSubmissions from './pages/admin/ClientSubmissions';
 import EmployeeSubmissions from './pages/admin/EmployeeSubmissions';
 import CancellationRequests from './pages/admin/CancellationRequests';
+import DirectProjectApprovals from './pages/admin/DirectProjectApprovals';
 
 // Coordinator pages
 import CoordinatorDashboard from './pages/coordinator/CoordinatorDashboard';
@@ -87,12 +88,21 @@ function RoleDashboard() {
   }
 
   // For roles whose first item IS /dashboard, render the appropriate content
-  // md_gm has no sidebar tabs but should land on project-approval
-  if (role === 'md_gm') {
-    return <Navigate to="/dashboard/project-approval" replace />;
-  }
-
   switch (role) {
+    case 'admin':
+      return <AdminDashboard />;
+    case 'hr_head':
+      return <HRDashboard />;
+    case 'coordinator':
+      return <CoordinatorDashboard />;
+    case 'accessor':
+      return <AccessorDashboard />;
+    case 'senior_valuer':
+      return <SeniorValuerDashboard />;
+    case 'md_gm':
+      return <MDGMDashboard />;
+    case 'field_officer':
+      return <FieldOfficerDashboard />;
     case 'general_employee':
       return <MyAttendance />;
     case 'client':
@@ -133,14 +143,15 @@ export default function App() {
         <Route path="client-submissions" element={<ProtectedRoute allowedRoles={['admin']}><ClientSubmissions /></ProtectedRoute>} />
         <Route path="employee-submissions" element={<ProtectedRoute allowedRoles={['admin']}><EmployeeSubmissions /></ProtectedRoute>} />
         <Route path="cancellation-requests" element={<ProtectedRoute allowedRoles={['admin']}><CancellationRequests /></ProtectedRoute>} />
+        <Route path="direct-project-approvals" element={<ProtectedRoute allowedRoles={['admin']}><DirectProjectApprovals /></ProtectedRoute>} />
 
-        {/* HR Head routes */}
-        <Route path="attendance-summary" element={<ProtectedRoute allowedRoles={['hr_head']}><AttendanceSummary /></ProtectedRoute>} />
-        <Route path="leave-management" element={<ProtectedRoute allowedRoles={['hr_head']}><LeaveManagement /></ProtectedRoute>} />
-        <Route path="payments" element={<ProtectedRoute allowedRoles={['hr_head']}><PaymentManagement /></ProtectedRoute>} />
-        <Route path="leave-requests" element={<ProtectedRoute allowedRoles={['hr_head']}><LeaveRequests /></ProtectedRoute>} />
-        <Route path="attendance-view" element={<ProtectedRoute allowedRoles={['hr_head']}><AttendanceView /></ProtectedRoute>} />
-        <Route path="request-removal" element={<ProtectedRoute allowedRoles={['hr_head']}><RemovalRequest /></ProtectedRoute>} />
+        {/* HR Head routes (also accessible by admin) */}
+        <Route path="attendance-summary" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><AttendanceSummary /></ProtectedRoute>} />
+        <Route path="leave-management" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><LeaveManagement /></ProtectedRoute>} />
+        <Route path="payments" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><PaymentManagement /></ProtectedRoute>} />
+        <Route path="leave-requests" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><LeaveRequests /></ProtectedRoute>} />
+        <Route path="attendance-view" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><AttendanceView /></ProtectedRoute>} />
+        <Route path="request-removal" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><RemovalRequest /></ProtectedRoute>} />
 
         {/* Coordinator routes */}
         <Route path="assigned-submissions" element={<ProtectedRoute allowedRoles={['coordinator']}><AssignedSubmissions /></ProtectedRoute>} />

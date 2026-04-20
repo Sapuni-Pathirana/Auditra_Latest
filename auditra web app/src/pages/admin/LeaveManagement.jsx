@@ -81,42 +81,46 @@ export default function LeaveManagement() {
         }}
       />
 
-      <TableContainer component={Paper}>
-        <Table size="small" sx={{ tableLayout: 'fixed' }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+        <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell sx={{ width: '15%' }}>Employee</TableCell>
-              <TableCell sx={{ width: '10%' }}>Type</TableCell>
-              <TableCell sx={{ width: '12%' }}>From</TableCell>
-              <TableCell sx={{ width: '12%' }}>To</TableCell>
-              <TableCell sx={{ width: '21%' }}>Reason</TableCell>
-              <TableCell sx={{ width: '10%' }}>Status</TableCell>
-              <TableCell sx={{ width: '20%' }}>Actions</TableCell>
+            <TableRow sx={{ bgcolor: (t) => t.palette.custom?.tableHeader || '#F1F5F9' }}>
+              <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Employee</TableCell>
+              <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Type</TableCell>
+              <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>From</TableCell>
+              <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>To</TableCell>
+              <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Reason</TableCell>
+              <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={7} align="center">No requests found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                <Typography color="text.secondary">No requests found</Typography>
+              </TableCell></TableRow>
             ) : (
               filtered.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.user_username || r.employee_name || '-'}</TableCell>
-                  <TableCell sx={{ textTransform: 'capitalize' }}>{r.leave_type}</TableCell>
-                  <TableCell>{formatDate(r.start_date)}</TableCell>
-                  <TableCell>{formatDate(r.end_date)}</TableCell>
-                  <TableCell sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reason}</TableCell>
-                  <TableCell><StatusChip status={r.status} /></TableCell>
-                  <TableCell>
+                <TableRow key={r.id} hover>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.user_username || r.employee_name || '-'}</TableCell>
+                  <TableCell sx={{ textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{r.leave_type}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(r.start_date)}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(r.end_date)}</TableCell>
+                  <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reason}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}><StatusChip status={r.status} /></TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
                     {r.status === 'pending' ? (
                       <Box sx={{ display: 'flex', gap: 0.5 }}>
                         <Button size="small" variant="outlined" color="primary" startIcon={<Check />}
-                          sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 0, px: 1 }}
+                          sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
                           onClick={() => handleAction(r.id, 'approved')}>Approve</Button>
                         <Button size="small" variant="outlined" color="error" startIcon={<Close />}
-                          sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 0, px: 1 }}
+                          sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
                           onClick={() => handleAction(r.id, 'rejected')}>Reject</Button>
                       </Box>
-                    ) : <Box sx={{ textAlign: 'center' }}>-</Box>}
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">-</Typography>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

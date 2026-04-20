@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Chip, IconButton, TextField, InputAdornment,
+  TableHead, TableRow, IconButton, TextField, InputAdornment,
   Tabs, Tab, Alert, Snackbar, Dialog, DialogTitle, DialogContent,
   DialogActions, Button, CircularProgress
 } from '@mui/material';
@@ -114,7 +114,7 @@ export default function LeaveRequests() {
                     {req.reason || '-'}
                   </TableCell>
                   <TableCell>
-                    <Chip label={req.status} color={getStatusColor(req.status)} size="small" sx={{ width: 110, justifyContent: 'center', textTransform: 'capitalize' }} />
+                    <StatusChip status={req.status} />
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -129,7 +129,7 @@ export default function LeaveRequests() {
                             color="primary"
                             startIcon={<Check />}
                             onClick={() => handleAction(req.id, 'approved')}
-                            sx={{ minWidth: 100 }}
+                            sx={{ width: 110 }}
                           >
                             Approve
                           </Button>
@@ -139,7 +139,7 @@ export default function LeaveRequests() {
                             color="error"
                             startIcon={<Close />}
                             onClick={() => handleAction(req.id, 'rejected')}
-                            sx={{ minWidth: 100 }}
+                            sx={{ width: 110 }}
                           >
                             Reject
                           </Button>
@@ -173,11 +173,11 @@ export default function LeaveRequests() {
         <DialogActions>
           {detailDialog.request?.status === 'pending' && (
             <>
-              <Button color="error" onClick={() => { handleAction(detailDialog.request.id, 'rejected'); setDetailDialog({ open: false, request: null }); }}>Reject</Button>
-              <Button color="success" variant="contained" onClick={() => { handleAction(detailDialog.request.id, 'approved'); setDetailDialog({ open: false, request: null }); }}>Approve</Button>
+              <Button color="error" sx={{ width: 110 }} onClick={() => { handleAction(detailDialog.request.id, 'rejected'); setDetailDialog({ open: false, request: null }); }}>Reject</Button>
+              <Button color="primary" variant="outlined" sx={{ width: 110 }} onClick={() => { handleAction(detailDialog.request.id, 'approved'); setDetailDialog({ open: false, request: null }); }}>Approve</Button>
             </>
           )}
-          <Button onClick={() => setDetailDialog({ open: false, request: null })}>Close</Button>
+          <Button sx={{ width: 110 }} onClick={() => setDetailDialog({ open: false, request: null })}>Close</Button>
         </DialogActions>
       </Dialog>
 

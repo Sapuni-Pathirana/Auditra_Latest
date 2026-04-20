@@ -5,7 +5,7 @@ import {
   Alert, Snackbar, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, Tabs, Tab, Collapse, IconButton, Stack
 } from '@mui/material';
-import { Search, PictureAsPdf, KeyboardArrowDown, KeyboardArrowUp, Person, CalendarToday, CheckCircle, Cancel, Description, Download } from '@mui/icons-material';
+import { Search, PictureAsPdf, KeyboardArrowDown, KeyboardArrowUp, Person, CalendarToday, CheckCircle, Cancel, Description, Visibility } from '@mui/icons-material';
 import projectService from '../../services/projectService';
 import valuationService from '../../services/valuationService';
 import { viewValuationPDF } from '../../utils/generateValuationPDF';
@@ -203,7 +203,7 @@ export default function SeniorValuerProjects() {
                       <TableCell>{formatDate(project.end_date || project.due_date)}</TableCell>
                       <TableCell align="center">
                         <Chip label={capitalize(project.priority) || 'Normal'} size="small"
-                          sx={{ bgcolor: `${getPriorityColor(project.priority)}20`, color: getPriorityColor(project.priority), fontWeight: 600, fontSize: 12, width: 90, justifyContent: 'center', border: `1px solid ${getPriorityColor(project.priority)}50` }} />
+                          sx={{ bgcolor: `${getPriorityColor(project.priority)}20`, color: getPriorityColor(project.priority), fontWeight: 600, fontSize: 12, width: 110, justifyContent: 'center', border: `1px solid ${getPriorityColor(project.priority)}50` }} />
                       </TableCell>
                       <TableCell align="center">
                         <StatusChip status={project.status} label={capitalize(project.status?.replace('_', ' ')) || '-'} />
@@ -431,12 +431,12 @@ export default function SeniorValuerProjects() {
                                       </Box>
                                       <Button
                                         size="small"
-                                        startIcon={<Download />}
+                                        startIcon={<Visibility />}
                                         href={doc.file_url}
                                         target="_blank"
                                         sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}
                                       >
-                                        Download
+                                        View
                                       </Button>
                                     </Box>
                                   ))}
@@ -474,7 +474,7 @@ export default function SeniorValuerProjects() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setApproveDialog({ ...approveDialog, open: false })} sx={{ width: 110 }}>Cancel</Button>
-          <Button onClick={handleApproveValuation} color="primary" variant="contained">Approve & Send to MD/GM</Button>
+          <Button onClick={handleApproveValuation} color="primary" variant="outlined" sx={{ width: 110 }}>Approve & Send to MD/GM</Button>
         </DialogActions>
       </Dialog>
 
@@ -497,7 +497,7 @@ export default function SeniorValuerProjects() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setRejectDialog({ ...rejectDialog, open: false })} sx={{ width: 110 }}>Cancel</Button>
-          <Button onClick={handleRejectValuation} color="error" variant="contained" sx={{ width: 110 }}>Reject</Button>
+          <Button onClick={handleRejectValuation} color="error" variant="outlined" sx={{ width: 110 }}>Reject</Button>
         </DialogActions>
       </Dialog>
 

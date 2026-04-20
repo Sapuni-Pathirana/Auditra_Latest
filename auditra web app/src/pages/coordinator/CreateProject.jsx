@@ -23,6 +23,7 @@ export default function CreateProject() {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
   const [form, setForm] = useState({
     title: submissionData?.project_title || '',
     description: submissionData?.project_description || '',
@@ -55,7 +56,77 @@ export default function CreateProject() {
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+    if (formErrors[name]) setFormErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const isValidSLPhone = (phone) => {
+    const cleaned = phone.replace(/[\s\-()]/g, '');
+    // +94XXXXXXXXX (12 chars) or 0XXXXXXXXX (10 chars)
+    return /^\+94\d{9}$/.test(cleaned) || /^0\d{9}$/.test(cleaned);
+  };
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const validateForm = () => {
+    const errors = {};
+
+    // Date validations
+    if (!form.start_date) {
+      errors.start_date = 'Start date is required';
+    } else if (form.start_date < today) {
+      errors.start_date = 'Start date must be today or a future date';
+    }
+
+    if (!form.end_date) {
+      errors.end_date = 'End date is required';
+    } else if (form.start_date && form.end_date <= form.start_date) {
+      errors.end_date = 'End date must be after start date';
+    }
+
+    // Estimated value
+    const val = parseFloat(form.estimated_value);
+    if (!form.estimated_value || isNaN(val) || val <= 0) {
+      errors.estimated_value = 'Estimated value must be greater than zero';
+    }
+
+    // Client name & email required
+    if (!form.client_name.trim()) {
+      errors.client_name = 'Client name is required';
+    }
+    if (!form.client_email.trim()) {
+      errors.client_email = 'Client email is required';
+    } else if (!isValidEmail(form.client_email)) {
+      errors.client_email = 'Please enter a valid email';
+    }
+
+    // Client phone validation (if provided)
+    if (form.client_phone.trim() && !isValidSLPhone(form.client_phone)) {
+      errors.client_phone = 'Enter a valid Sri Lankan phone number (e.g. +94771234567)';
+    }
+
+    // Agent validations (only if agent email is provided)
+    if (form.agent_email.trim()) {
+      if (!isValidEmail(form.agent_email)) {
+        errors.agent_email = 'Please enter a valid email';
+      }
+      if (!form.agent_name.trim()) {
+        errors.agent_name = 'Agent name is required when agent email is provided';
+      }
+    }
+
+    // Agent phone validation (if provided)
+    if (form.agent_phone.trim() && !isValidSLPhone(form.agent_phone)) {
+      errors.agent_phone = 'Enter a valid Sri Lankan phone number (e.g. +94771234567)';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const checkEmail = useCallback(async (email, roleType, setStatus, setMessage) => {
     if (!email || !email.includes('@')) {
@@ -137,19 +208,11 @@ export default function CreateProject() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
 
-    // Validate dates
-    if (form.start_date && form.end_date) {
-      const startDate = new Date(form.start_date);
-      const endDate = new Date(form.end_date);
-      if (endDate <= startDate) {
-        setError('End date must be after start date');
-        setLoading(false);
-        return;
-      }
-    }
+    if (!validateForm()) return;
+
+    setLoading(true);
 
     // Package data: flat project fields + client_info/agent_info as JSON objects
     const payload = {
@@ -256,6 +319,14 @@ export default function CreateProject() {
           </strong>.
         </Alert>
       )}
+      {!submissionId && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Admin Approval Required</Typography>
+          <Typography variant="body2">
+            Projects created directly require admin approval before they can be started.
+          </Typography>
+        </Alert>
+      )}
       {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-line' }}>{error}</Alert>}
       <form onSubmit={handleSubmit}>
         <Card sx={{ mb: 3 }}>
@@ -271,34 +342,51 @@ export default function CreateProject() {
                   <MenuItem value="low">Low</MenuItem>
                 </TextField>
               </Grid>
-              <Grid item xs={12} sm={4}><TextField fullWidth label="Start Date" name="start_date" type="date" value={form.start_date} onChange={handleChange} InputLabelProps={{ shrink: true }} /></Grid>
               <Grid item xs={12} sm={4}>
-                <TextField 
-                  fullWidth 
-                  label="End Date" 
-                  name="end_date" 
-                  type="date" 
-                  value={form.end_date} 
-                  onChange={handleChange} 
+                <TextField
+                  fullWidth
+                  label="Start Date"
+                  name="start_date"
+                  type="date"
+                  value={form.start_date}
+                  onChange={handleChange}
                   InputLabelProps={{ shrink: true }}
-                  inputProps={{ min: form.start_date || undefined }}
-                  error={form.start_date && form.end_date && new Date(form.end_date) <= new Date(form.start_date)}
-                  helperText={form.start_date && form.end_date && new Date(form.end_date) <= new Date(form.start_date) ? 'End date must be after start date' : ''}
+                  inputProps={{ min: today }}
+                  required
+                  error={!!formErrors.start_date}
+                  helperText={formErrors.start_date}
                 />
               </Grid>
               <Grid item xs={12} sm={4}>
-                <TextField 
-                  fullWidth 
-                  label="Estimated Value (LKR)" 
-                  name="estimated_value" 
-                  type="number"
-                  value={form.estimated_value} 
-                  onChange={handleChange} 
+                <TextField
+                  fullWidth
+                  label="End Date"
+                  name="end_date"
+                  type="date"
+                  value={form.end_date}
+                  onChange={handleChange}
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ min: form.start_date || today }}
                   required
+                  error={!!formErrors.end_date}
+                  helperText={formErrors.end_date}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Estimated Value (LKR)"
+                  name="estimated_value"
+                  type="number"
+                  value={form.estimated_value}
+                  onChange={handleChange}
+                  required
+                  error={!!formErrors.estimated_value}
+                  helperText={formErrors.estimated_value || 'Client must pay this amount before project starts'}
                   InputProps={{
                     startAdornment: <InputAdornment position="start">Rs.</InputAdornment>,
                   }}
-                  helperText="Client must pay this amount before project starts"
+                  inputProps={{ min: 1 }}
                 /></Grid>
             </Grid>
           </CardContent>
@@ -307,7 +395,18 @@ export default function CreateProject() {
           <CardContent sx={{ p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Client Information</Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}><TextField fullWidth label="Client Name" name="client_name" value={form.client_name} onChange={handleChange} /></Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Client Name"
+                  name="client_name"
+                  value={form.client_name}
+                  onChange={handleChange}
+                  required
+                  error={!!formErrors.client_name}
+                  helperText={formErrors.client_name}
+                />
+              </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -320,8 +419,10 @@ export default function CreateProject() {
                     if (clientEmailStatus) { setClientEmailStatus(null); setClientEmailMessage(''); }
                   }}
                   onBlur={handleClientEmailBlur}
-                  helperText={clientEmailMessage}
-                  FormHelperTextProps={{ sx: { color: getEmailHelperColor(clientEmailStatus) } }}
+                  required
+                  error={!!formErrors.client_email}
+                  helperText={formErrors.client_email || clientEmailMessage}
+                  FormHelperTextProps={{ sx: { color: formErrors.client_email ? 'error.main' : getEmailHelperColor(clientEmailStatus) } }}
                   InputProps={{
                     endAdornment: clientEmailStatus ? (
                       <InputAdornment position="end">{getEmailAdornment(clientEmailStatus)}</InputAdornment>
@@ -329,7 +430,18 @@ export default function CreateProject() {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}><TextField fullWidth label="Client Phone" name="client_phone" value={form.client_phone} onChange={handleChange} /></Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Client Phone"
+                  name="client_phone"
+                  value={form.client_phone}
+                  onChange={handleChange}
+                  placeholder="+94XXXXXXXXX"
+                  error={!!formErrors.client_phone}
+                  helperText={formErrors.client_phone}
+                />
+              </Grid>
               <Grid item xs={12} sm={6}><TextField fullWidth label="Company" name="client_company" value={form.client_company} onChange={handleChange} /></Grid>
               <Grid item xs={12}><TextField fullWidth label="Client Address" name="client_address" value={form.client_address} onChange={handleChange} /></Grid>
             </Grid>
@@ -349,7 +461,17 @@ export default function CreateProject() {
           <CardContent sx={{ p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Agent Information (Optional)</Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}><TextField fullWidth label="Agent Name" name="agent_name" value={form.agent_name} onChange={handleChange} /></Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Agent Name"
+                  name="agent_name"
+                  value={form.agent_name}
+                  onChange={handleChange}
+                  error={!!formErrors.agent_name}
+                  helperText={formErrors.agent_name}
+                />
+              </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -362,8 +484,9 @@ export default function CreateProject() {
                     if (agentEmailStatus) { setAgentEmailStatus(null); setAgentEmailMessage(''); }
                   }}
                   onBlur={handleAgentEmailBlur}
-                  helperText={agentEmailMessage}
-                  FormHelperTextProps={{ sx: { color: getEmailHelperColor(agentEmailStatus) } }}
+                  error={!!formErrors.agent_email}
+                  helperText={formErrors.agent_email || agentEmailMessage}
+                  FormHelperTextProps={{ sx: { color: formErrors.agent_email ? 'error.main' : getEmailHelperColor(agentEmailStatus) } }}
                   InputProps={{
                     endAdornment: agentEmailStatus ? (
                       <InputAdornment position="end">{getEmailAdornment(agentEmailStatus)}</InputAdornment>
@@ -371,7 +494,18 @@ export default function CreateProject() {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={4}><TextField fullWidth label="Agent Phone" name="agent_phone" value={form.agent_phone} onChange={handleChange} /></Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Agent Phone"
+                  name="agent_phone"
+                  value={form.agent_phone}
+                  onChange={handleChange}
+                  placeholder="+94XXXXXXXXX"
+                  error={!!formErrors.agent_phone}
+                  helperText={formErrors.agent_phone}
+                />
+              </Grid>
               <Grid item xs={12} sm={4}><TextField fullWidth label="License Number" name="agent_license_number" value={form.agent_license_number} onChange={handleChange} /></Grid>
               <Grid item xs={12} sm={4}><TextField fullWidth label="Agent Address" name="agent_address" value={form.agent_address} onChange={handleChange} /></Grid>
             </Grid>

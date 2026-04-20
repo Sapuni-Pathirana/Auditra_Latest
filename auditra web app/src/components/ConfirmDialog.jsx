@@ -9,7 +9,7 @@ export default function ConfirmDialog({ open, title, message, onConfirm, onCance
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onCancel} variant="outlined">Cancel</Button>
-        <Button onClick={onConfirm} variant="contained" color={confirmColor}>{confirmText}</Button>
+        <Button onClick={onConfirm} variant="outlined" color={confirmColor} sx={{ width: 110 }}>{confirmText}</Button>
       </DialogActions>
     </Dialog>
   );

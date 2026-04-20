@@ -116,7 +116,7 @@ export default function ProjectApproval() {
                   <TableCell>
                     <Chip label={capitalize(project.priority) || 'Normal'} size="small"
                       color={project.priority === 'high' ? 'primary' : project.priority === 'medium' ? 'warning' : 'default'}
-                      sx={{ width: 90, justifyContent: 'center' }} />
+                      sx={{ width: 110, justifyContent: 'center' }} />
                   </TableCell>
                   <TableCell>{formatDate(project.start_date)}</TableCell>
                   <TableCell>{formatDate(project.end_date || project.due_date)}</TableCell>
@@ -124,7 +124,7 @@ export default function ProjectApproval() {
                     <Chip label={project.status} size="small" color={getStatusColor(project.status) || 'default'} sx={{ width: 110, justifyContent: 'center' }} />
                   </TableCell>
                   <TableCell align="right">
-                    <Button size="small" startIcon={<Visibility />}
+                    <Button size="small" startIcon={<Visibility />} sx={{ width: 110 }}
                       onClick={() => { setDetailDialog({ open: true, project }); setRemarks(''); }}>
                       Review
                     </Button>
@@ -171,7 +171,7 @@ export default function ProjectApproval() {
               </Box>
               <Box>
                 <Typography variant="subtitle2" color="text.secondary">Current Status</Typography>
-                <Chip label={detailDialog.project.status} size="small" color={getStatusColor(detailDialog.project.status) || 'default'} />
+                <Chip label={detailDialog.project.status} size="small" color={getStatusColor(detailDialog.project.status) || 'default'} sx={{ width: 110, justifyContent: 'center' }} />
               </Box>
 
               {detailDialog.project.status === 'pending' && (
@@ -197,13 +197,13 @@ export default function ProjectApproval() {
                 onClick={() => handleAction(detailDialog.project.id, 'rejected')}>
                 Reject
               </Button>
-              <Button color="primary" variant="contained" startIcon={<CheckCircle />} sx={{ width: 110 }}
+              <Button color="primary" variant="outlined" startIcon={<CheckCircle />} sx={{ width: 110 }}
                 onClick={() => handleAction(detailDialog.project.id, 'approved')}>
                 Approve
               </Button>
             </>
           )}
-          <Button onClick={() => setDetailDialog({ open: false, project: null })}>Close</Button>
+          <Button sx={{ width: 110 }} onClick={() => setDetailDialog({ open: false, project: null })}>Close</Button>
         </DialogActions>
       </Dialog>
 

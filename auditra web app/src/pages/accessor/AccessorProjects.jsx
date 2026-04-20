@@ -5,7 +5,7 @@ import {
   Alert, Snackbar, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, Tabs, Tab, Collapse, IconButton, Stack
 } from '@mui/material';
-import { Search, Visibility, Map, PictureAsPdf, KeyboardArrowDown, KeyboardArrowUp, Person, CalendarToday, Description, Download } from '@mui/icons-material';
+import { Search, Visibility, Map, PictureAsPdf, KeyboardArrowDown, KeyboardArrowUp, Person, CalendarToday, Description } from '@mui/icons-material';
 import projectService from '../../services/projectService';
 import valuationService from '../../services/valuationService';
 import { viewValuationPDF } from '../../utils/generateValuationPDF';
@@ -204,7 +204,7 @@ export default function AccessorProjects() {
                       <TableCell>{formatDate(project.end_date || project.due_date)}</TableCell>
                       <TableCell align="center">
                         <Chip label={capitalize(project.priority) || 'Normal'} size="small"
-                          sx={{ bgcolor: `${getPriorityColor(project.priority)}20`, color: getPriorityColor(project.priority), fontWeight: 600, fontSize: 12, width: 90, justifyContent: 'center', border: `1px solid ${getPriorityColor(project.priority)}50` }} />
+                          sx={{ bgcolor: `${getPriorityColor(project.priority)}20`, color: getPriorityColor(project.priority), fontWeight: 600, fontSize: 12, width: 110, justifyContent: 'center', border: `1px solid ${getPriorityColor(project.priority)}50` }} />
                       </TableCell>
                       <TableCell align="center">
                         <StatusChip status={project.status} label={capitalize(project.status?.replace('_', ' ')) || '-'} />
@@ -410,12 +410,12 @@ export default function AccessorProjects() {
                                       </Box>
                                       <Button
                                         size="small"
-                                        startIcon={<Download />}
+                                        startIcon={<Visibility />}
                                         href={doc.file_url}
                                         target="_blank"
                                         sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}
                                       >
-                                        Download
+                                        View
                                       </Button>
                                     </Box>
                                   ))}
@@ -618,11 +618,11 @@ export default function AccessorProjects() {
             </Button>
           )}
           <Box sx={{ flexGrow: 1 }} />
-          <Button onClick={() => setValuationDetailDialog({ open: false, valuation: null, projectTitle: '' })}>Close</Button>
+          <Button sx={{ width: 110 }} onClick={() => setValuationDetailDialog({ open: false, valuation: null, projectTitle: '' })}>Close</Button>
           {(valuationDetailDialog.valuation?.status === 'submitted' || valuationDetailDialog.valuation?.status === 'under_review') && (
             <>
               <Button
-                variant="contained"
+                variant="outlined"
                 color="primary"
                 sx={{ width: 110 }}
                 onClick={() => {
@@ -667,7 +667,7 @@ export default function AccessorProjects() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setAcceptDialog({ ...acceptDialog, open: false })} sx={{ width: 110 }}>Cancel</Button>
-          <Button onClick={handleAcceptValuation} color="primary" variant="contained" sx={{ minWidth: 180 }}>Submit to Senior Valuer</Button>
+          <Button onClick={handleAcceptValuation} color="primary" variant="outlined" sx={{ width: 110 }}>Submit to Senior Valuer</Button>
         </DialogActions>
       </Dialog>
 
@@ -690,7 +690,7 @@ export default function AccessorProjects() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setRejectDialog({ ...rejectDialog, open: false })} sx={{ width: 110 }}>Cancel</Button>
-          <Button onClick={handleRejectValuation} color="error" variant="contained" sx={{ width: 110 }}>Reject</Button>
+          <Button onClick={handleRejectValuation} color="error" variant="outlined" sx={{ width: 110 }}>Reject</Button>
         </DialogActions>
       </Dialog>
 

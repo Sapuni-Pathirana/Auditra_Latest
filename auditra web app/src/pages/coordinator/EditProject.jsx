@@ -8,7 +8,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DescriptionIcon from '@mui/icons-material/Description';
-import DownloadIcon from '@mui/icons-material/Download';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
@@ -258,9 +258,9 @@ export default function EditProject() {
                       </Box>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <Tooltip title="Download">
+                      <Tooltip title="View">
                         <IconButton size="small" href={doc.file_url} target="_blank" component="a">
-                          <DownloadIcon fontSize="small" />
+                          <VisibilityIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete">

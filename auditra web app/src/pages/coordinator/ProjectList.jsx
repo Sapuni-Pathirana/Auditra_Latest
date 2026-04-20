@@ -23,6 +23,13 @@ const PAYMENT_STATUS_CONFIG = {
   rejected: { label: 'Payment Rejected', color: '#DC2626', bg: '#DC262620' },
 };
 
+const ADMIN_APPROVAL_CONFIG = {
+  not_submitted: { label: 'Not Submitted', color: '#757575', bg: '#75757520' },
+  pending: { label: 'Pending', color: '#ED6C02', bg: '#ED6C0220' },
+  approved: { label: 'Approved', color: '#1565C0', bg: '#1565C020' },
+  rejected: { label: 'Rejected', color: '#D32F2F', bg: '#D32F2F20' },
+};
+
 export default function ProjectList() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +93,7 @@ export default function ProjectList() {
               <TableCell>Priority</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Payment Status</TableCell>
+              <TableCell>Admin Approval</TableCell>
               <TableCell>Est. Value</TableCell>
               <TableCell>Start</TableCell>
               <TableCell>End</TableCell>
@@ -94,7 +102,7 @@ export default function ProjectList() {
           </TableHead>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={8} align="center">No projects found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} align="center">No projects found</TableCell></TableRow>
             ) : (
               filtered.map((p) => {
                 const paymentStatus = p.payment?.payment_status || 'pending';
@@ -104,7 +112,7 @@ export default function ProjectList() {
                   <TableRow key={p.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/dashboard/projects/${p.id}`)}>
                     <TableCell sx={{ fontWeight: 600 }}>{p.title}</TableCell>
                     <TableCell>
-                      <Chip label={capitalize(p.priority)} size="small" sx={{ bgcolor: `${getPriorityColor(p.priority)}20`, color: getPriorityColor(p.priority), fontWeight: 600, fontSize: 12, width: 90, justifyContent: 'center', border: `1px solid ${getPriorityColor(p.priority)}50` }} />
+                      <Chip label={capitalize(p.priority)} size="small" sx={{ bgcolor: `${getPriorityColor(p.priority)}20`, color: getPriorityColor(p.priority), fontWeight: 600, fontSize: 12, width: 110, justifyContent: 'center', border: `1px solid ${getPriorityColor(p.priority)}50` }} />
                     </TableCell>
                     <TableCell><StatusChip status={p.status} label={p.status_display || p.status} /></TableCell>
                     <TableCell>
@@ -121,6 +129,28 @@ export default function ProjectList() {
                           border: `1px solid ${paymentConfig.color}50`,
                         }}
                       />
+                    </TableCell>
+                    <TableCell>
+                      {p.admin_approval_status && p.admin_approval_status !== 'not_required' ? (() => {
+                        const config = ADMIN_APPROVAL_CONFIG[p.admin_approval_status] || ADMIN_APPROVAL_CONFIG.pending;
+                        return (
+                          <Chip
+                            label={config.label}
+                            size="small"
+                            sx={{
+                              bgcolor: config.bg,
+                              color: config.color,
+                              fontWeight: 600,
+                              fontSize: 12,
+                              width: 110,
+                              justifyContent: 'center',
+                              border: `1px solid ${config.color}50`,
+                            }}
+                          />
+                        );
+                      })() : (
+                        <Typography variant="body2" color="text.secondary">-</Typography>
+                      )}
                     </TableCell>
                     <TableCell>
                       {p.estimated_value ? `Rs. ${Number(p.estimated_value).toLocaleString()}` : '-'}

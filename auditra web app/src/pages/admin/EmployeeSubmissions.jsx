@@ -435,6 +435,8 @@ export default function EmployeeSubmissions() {
                             color: STATUS_CHIP_COLORS[sub.status] || '#90CAF9',
                             bgcolor: `${STATUS_CHIP_COLORS[sub.status] || '#90CAF9'}15`,
                             border: `1px solid ${STATUS_CHIP_COLORS[sub.status] || '#90CAF9'}50`,
+                            width: 110,
+                            justifyContent: 'center',
                           }}
                         />
                       </TableCell>
@@ -447,7 +449,7 @@ export default function EmployeeSubmissions() {
                             <Chip
                               label="Hired"
                               size="small"
-                              sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#1565C0', bgcolor: '#1565C015', border: '1px solid #1565C050' }}
+                              sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#1565C0', bgcolor: '#1565C015', border: '1px solid #1565C050', width: 110, justifyContent: 'center' }}
                             />
                           ) : (
                             <>
@@ -457,7 +459,7 @@ export default function EmployeeSubmissions() {
                                   variant="outlined"
                                   onClick={(e) => handleMarkReviewed(e, sub)}
                                   disabled={actionLoading}
-                                  sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 0, px: 1 }}
+                                  sx={{ textTransform: 'none', whiteSpace: 'nowrap', width: 110 }}
                                 >
                                   Review
                                 </Button>
@@ -469,7 +471,7 @@ export default function EmployeeSubmissions() {
                                   color="error"
                                   onClick={(e) => handleReject(e, sub)}
                                   disabled={actionLoading}
-                                  sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 0, px: 1 }}
+                                  sx={{ textTransform: 'none', whiteSpace: 'nowrap', width: 110 }}
                                 >
                                   Reject
                                 </Button>
@@ -481,7 +483,7 @@ export default function EmployeeSubmissions() {
                                   startIcon={<PersonAddIcon />}
                                   onClick={(e) => openHireDialog(e, sub)}
                                   disabled={actionLoading}
-                                  sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+                                  sx={{ textTransform: 'none', whiteSpace: 'nowrap', width: 110 }}
                                 >
                                   Hire
                                 </Button>

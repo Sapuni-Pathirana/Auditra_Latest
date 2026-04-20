@@ -485,6 +485,8 @@ export default function ClientSubmissions() {
                                 color: STATUS_CHIP_COLORS[displayStatus] || '#90CAF9',
                                 bgcolor: `${STATUS_CHIP_COLORS[displayStatus] || '#90CAF9'}15`,
                                 border: `1px solid ${STATUS_CHIP_COLORS[displayStatus] || '#90CAF9'}50`,
+                                width: 110,
+                                justifyContent: 'center',
                               }}
                             />
                           );
@@ -546,7 +548,7 @@ export default function ClientSubmissions() {
                                     color="primary"
                                     startIcon={<ReplayIcon />}
                                     onClick={(e) => handleOpenAssignDialog(e, sub)}
-                                    sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                                    sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', whiteSpace: 'nowrap', width: 110 }}
                                   >
                                     Re-assign
                                   </Button>
@@ -558,10 +560,10 @@ export default function ClientSubmissions() {
                               return (
                                 <Button
                                   size="small"
-                                  variant="contained"
+                                  variant="outlined"
                                   color="primary"
                                   disabled
-                                  sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}
+                                  sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 600, width: 110 }}
                                 >
                                   Assigned
                                 </Button>
@@ -574,7 +576,7 @@ export default function ClientSubmissions() {
                                 startIcon={<PersonAddIcon />}
                                 disabled={assignLoading}
                                 onClick={(e) => handleOpenAssignDialog(e, sub)}
-                                sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}
+                                sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 600, width: 110 }}
                               >
                                 Assign
                               </Button>
@@ -598,10 +600,10 @@ export default function ClientSubmissions() {
                             return (
                               <Button
                                 size="small"
-                                variant="contained"
+                                variant="outlined"
                                 color="primary"
                                 disabled
-                                sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}
+                                sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 600, width: 110 }}
                               >
                                 Assigned
                               </Button>
@@ -614,12 +616,12 @@ export default function ClientSubmissions() {
                               <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'center' }}>
                                 <Button
                                   size="small"
-                                  variant="contained"
+                                  variant="outlined"
                                   color="primary"
                                   startIcon={<CheckCircleIcon />}
                                   disabled={approveLoading}
                                   onClick={(e) => handleAcceptReview(e, sub)}
-                                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}
+                                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', width: 110 }}
                                 >
                                   Accept
                                 </Button>
@@ -629,7 +631,7 @@ export default function ClientSubmissions() {
                                   color="error"
                                   startIcon={<CancelIcon />}
                                   onClick={(e) => handleOpenRejectDialog(e, sub)}
-                                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}
+                                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', width: 110 }}
                                 >
                                   Reject
                                 </Button>
@@ -647,7 +649,7 @@ export default function ClientSubmissions() {
                                   color="primary"
                                   startIcon={<ReplayIcon />}
                                   onClick={(e) => handleOpenAssignDialog(e, sub)}
-                                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', whiteSpace: 'nowrap', width: 110 }}
                                 >
                                   Re-assign
                                 </Button>
@@ -662,7 +664,7 @@ export default function ClientSubmissions() {
                               variant="outlined"
                               color="primary"
                               onClick={(e) => handleReviewSubmission(e, sub)}
-                              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}
+                              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', width: 110 }}
                             >
                               Review
                             </Button>
@@ -1043,12 +1045,12 @@ export default function ClientSubmissions() {
             Cancel
           </Button>
           <Button
-            variant="contained"
+            variant="outlined"
             color="error"
             onClick={handleReject}
             disabled={rejectLoading || !rejectionReason.trim()}
             startIcon={<CancelIcon />}
-            sx={{ textTransform: 'none', fontWeight: 600 }}
+            sx={{ textTransform: 'none', fontWeight: 600, width: 110 }}
           >
             {rejectLoading ? <CircularProgress size={20} /> : 'Reject'}
           </Button>

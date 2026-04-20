@@ -65,6 +65,19 @@ const projectService = {
   mdGmReject: (projectId) =>
     axiosClient.post(`/projects/${projectId}/md-gm-reject/`),
 
+  // Admin approval endpoints (for direct projects)
+  adminApprove: (projectId) =>
+    axiosClient.post(`/projects/${projectId}/admin-approve/`),
+
+  adminReject: (projectId, reason) =>
+    axiosClient.post(`/projects/${projectId}/admin-reject/`, { reason }),
+
+  requestAdminApproval: (projectId) =>
+    axiosClient.post(`/projects/${projectId}/request-admin-approval/`),
+
+  getAdminPendingProjects: (status = 'all') =>
+    axiosClient.get('/projects/admin-pending-projects/', { params: { status } }),
+
   checkEmail: (email, roleType) =>
     axiosClient.post('/projects/check-email/', { email, role_type: roleType }),
 
