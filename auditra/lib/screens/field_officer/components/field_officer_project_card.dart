@@ -7,6 +7,7 @@ class FieldOfficerProjectCard extends StatelessWidget {
   final Project project;
   final Function(Project) onViewDetails;
   final Function(Project) onViewReports;
+  final Function(Project) onCreateReport;
   final Function(Project) onSubmit;
 
   const FieldOfficerProjectCard({
@@ -14,6 +15,7 @@ class FieldOfficerProjectCard extends StatelessWidget {
     required this.project,
     required this.onViewDetails,
     required this.onViewReports,
+    required this.onCreateReport,
     required this.onSubmit,
   });
 
@@ -188,6 +190,32 @@ class FieldOfficerProjectCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (project.status == 'in_progress') ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => onCreateReport(project),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0D47A1),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        side: const BorderSide(color: Color(0xFF0D47A1)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.note_add_outlined, size: 18),
+                      label: const Text(
+                        'Create Report',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
@@ -339,7 +367,7 @@ class FieldOfficerProjectCard extends StatelessWidget {
     }
 
     return Container(
-      width: 90,
+      constraints: const BoxConstraints(maxWidth: 90),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
@@ -352,13 +380,16 @@ class FieldOfficerProjectCard extends StatelessWidget {
         children: [
           Icon(Icons.flag_rounded, size: 14, color: color),
           const SizedBox(width: 4),
-          Text(
-            priority.toUpperCase(),
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
+          Flexible(
+            child: Text(
+              priority.toUpperCase(),
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
             ),
           ),
         ],
