@@ -197,6 +197,14 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  void _createReport(Project project) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ValuationFormScreen(project: project),
+      ),
+    ).then((_) => _loadProjects());
+  }
+
   Future<void> _submitToAccessor(Project project) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -788,6 +796,7 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
                       project: project,
                       onViewDetails: _viewProjectDetails,
                       onViewReports: _viewValuationReports,
+                      onCreateReport: _createReport,
                       onSubmit: _submitToAccessor,
                     );
                   },
