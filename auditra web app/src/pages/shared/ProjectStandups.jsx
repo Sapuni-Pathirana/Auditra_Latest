@@ -6,18 +6,20 @@ import {
 import { Send, Assignment, CheckCircle } from '@mui/icons-material';
 import axiosClient from '../../api/axiosClient';
 import UserAvatar from '../../components/UserAvatar';
+import { useAuth } from '../../contexts/AuthContext';
 
 function formatTime(dt) {
   return new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 const KIND_LABELS = {
-  work_to_do: { label: '📋 Work To Do', color: 'warning' },
-  work_done: { label: '✅ Work Done', color: 'success' },
+  work_to_do: { label: 'Work To Do', color: 'warning' },
+  work_done: { label: 'Work Done', color: 'success' },
   free: { label: 'Message', color: 'default' },
 };
 
 export default function ProjectStandups({ projectId }) {
+  const { user } = useAuth();
   const [messages, setMessages] = useState([]);
   const [members, setMembers] = useState([]);
   const [body, setBody] = useState('');
@@ -27,16 +29,9 @@ export default function ProjectStandups({ projectId }) {
   const [mentionQuery, setMentionQuery] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
-  const currentUsername = (() => {
-    try {
-      const raw = localStorage.getItem('user');
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed?.username || parsed?.user?.username || null;
-    } catch {
-      return null;
-    }
-  })();
+  const currentUsername = user?.username || null;
+  const currentUserId = user?.id || null;
+  const currentDisplayName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
 
   const appendUniqueMessage = useCallback((incoming) => {
     if (!incoming) return;
@@ -133,7 +128,7 @@ export default function ProjectStandups({ projectId }) {
 
   const insertMention = (member) => {
     const name = member.username;
-    const newBody = body.replace(/@\w*$/, `@${name} `);
+    const newBody = body.replace(/@[\w.-]*$/, `@${name} `);
     setBody(newBody);
     setMentionQuery(null);
     inputRef.current?.focus();
@@ -160,7 +155,10 @@ export default function ProjectStandups({ projectId }) {
         ) : (
           <List disablePadding>
             {messages.map((msg, i) => {
-              const isMine = currentUsername && msg.author_username === currentUsername;
+              const isMine =
+                (currentUserId != null && msg.author === currentUserId) ||
+                (currentUsername && msg.author_username === currentUsername) ||
+                (currentDisplayName && msg.author_name === currentDisplayName);
               const seenByOthers = Array.isArray(msg.seen_by)
                 ? msg.seen_by.filter((v) => v.username !== msg.author_username)
                 : [];
@@ -186,8 +184,9 @@ export default function ProjectStandups({ projectId }) {
                       borderRadius: 2,
                       bgcolor: isMine ? '#DCF8C6' : '#FFFFFF',
                       color: 'text.primary',
-                      border: isMine ? 'none' : '1px solid',
-                      borderColor: 'divider',
+                      border: '1px solid',
+                      borderColor: isMine ? '#b7e3a2' : 'divider',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
                     }}
                   >
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.5 }}>
@@ -199,6 +198,13 @@ export default function ProjectStandups({ projectId }) {
                       </Typography>
                       <Chip
                         label={KIND_LABELS[msg.kind]?.label || msg.kind}
+                        icon={
+                          msg.kind === 'work_to_do'
+                            ? <Assignment sx={{ fontSize: 12 }} />
+                            : msg.kind === 'work_done'
+                              ? <CheckCircle sx={{ fontSize: 12 }} />
+                              : undefined
+                        }
                         size="small"
                         color={KIND_LABELS[msg.kind]?.color || 'default'}
                         sx={{ height: 18, fontSize: '0.65rem' }}
@@ -296,7 +302,7 @@ export default function ProjectStandups({ projectId }) {
           value={body}
           onChange={(e) => {
             setBody(e.target.value);
-            const match = e.target.value.match(/@(\w*)$/);
+            const match = e.target.value.match(/@([\w.-]*)$/);
             if (match) setMentionQuery(match[1]);
             else setMentionQuery(null);
           }}

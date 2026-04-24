@@ -52,7 +52,8 @@ class StandupMessage(models.Model):
 
     def parse_mentions(self):
         """Return list of @mentioned usernames found in body."""
-        return re.findall(r'@(\w+)', self.body)
+        # Support usernames containing dots/hyphens (e.g. @saman.fernando).
+        return re.findall(r'@([a-zA-Z0-9_.-]+)', self.body)
 
     def parse_role_mentions(self):
         """Return list of @role tokens (e.g. coordinator, field_officer) used in body.

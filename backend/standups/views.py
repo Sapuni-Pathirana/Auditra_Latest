@@ -98,18 +98,26 @@ def post_message(request, project_id):
     for u in mentioned_users:
         StandupMention.objects.get_or_create(message=msg, mentioned_user=u)
 
-    # Notify mentioned users
+    # Notify room members and give mention-specific notification to mentioned users.
     from notifications.services import notify
     author_name = request.user.get_full_name() or request.user.username
-    for u in mentioned_users:
+    mentioned_ids = {u.id for u in mentioned_users}
+    for u in members:
         if u.id == request.user.id:
             continue
+
+        is_mentioned = u.id in mentioned_ids
         notify(
             user=u,
             category='chat',
-            title=f'{author_name} mentioned you',
+            title=f'{author_name} mentioned you' if is_mentioned else f'New standup message from {author_name}',
             message=body[:200],
-            meta={'project_id': project.id, 'message_id': msg.id},
+            meta={
+                'project_id': project.id,
+                'message_id': msg.id,
+                'is_mention': is_mentioned,
+                'kind': kind,
+            },
             action_url=f'/dashboard/projects/{project.id}/standups',
         )
 

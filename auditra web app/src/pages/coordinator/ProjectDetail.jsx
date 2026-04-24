@@ -383,6 +383,7 @@ export default function ProjectDetail() {
   if (!project) return <Alert severity="error">Project not found</Alert>;
 
   const isCoordinator = role === 'coordinator';
+  const canAccessStandups = ['admin', 'coordinator', 'field_officer', 'accessor', 'senior_valuer', 'md_gm'].includes(role);
   const isPending = project.status === 'pending';
   
   // Payment status
@@ -505,15 +506,17 @@ export default function ProjectDetail() {
                 <Chip label={capitalize(project.priority)} size="small" sx={{ bgcolor: `${getPriorityColor(project.priority)}20`, color: getPriorityColor(project.priority), fontWeight: 600, width: 110, justifyContent: 'center', border: `1px solid ${getPriorityColor(project.priority)}50` }} />
               </Box>
             </Box>
+            {canAccessStandups && (
+              <Button
+                variant="outlined"
+                onClick={() => navigate(`/dashboard/projects/${id}/standups`)}
+                sx={{ fontWeight: 600, mr: isCoordinator ? 1 : 0 }}
+              >
+                Standups
+              </Button>
+            )}
             {isCoordinator && (
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                  variant="outlined"
-                  onClick={() => navigate(`/dashboard/projects/${id}/standups`)}
-                  sx={{ fontWeight: 600 }}
-                >
-                  Standups
-                </Button>
                 {project.status !== 'cancelled' && (
                   <Button
                     variant="outlined"

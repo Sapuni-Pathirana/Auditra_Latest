@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
@@ -13,6 +14,7 @@ import { formatDate, getStatusColor, capitalize, getPriorityColor, getPriorityBg
 const STATUS_TAB_MAP = { pending: 1, approved: 2, rejected: 3 };
 
 export default function ProjectApproval() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
@@ -129,10 +131,20 @@ export default function ProjectApproval() {
                     <Chip label={project.status} size="small" color={getStatusColor(project.status) || 'default'} sx={{ width: 110, justifyContent: 'center' }} />
                   </TableCell>
                   <TableCell align="right">
-                    <Button size="small" startIcon={<Visibility />} sx={{ width: 110 }}
-                      onClick={() => { setDetailDialog({ open: true, project }); setRemarks(''); }}>
-                      Review
-                    </Button>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        sx={{ width: 110 }}
+                        onClick={() => navigate(`/dashboard/projects/${project.id}/standups`)}
+                      >
+                        Standups
+                      </Button>
+                      <Button size="small" startIcon={<Visibility />} sx={{ width: 110 }}
+                        onClick={() => { setDetailDialog({ open: true, project }); setRemarks(''); }}>
+                        Review
+                      </Button>
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))

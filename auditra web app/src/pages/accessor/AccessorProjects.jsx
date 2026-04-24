@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Chip, TextField, InputAdornment, CircularProgress,
@@ -37,6 +38,7 @@ const DetailField = ({ label, value }) => (
 );
 
 export default function AccessorProjects() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -224,6 +226,16 @@ export default function AccessorProjects() {
                       >
                         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                           <Box sx={{ py: 3, px: 3 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => navigate(`/dashboard/projects/${project.id}/standups`)}
+                                sx={{ fontWeight: 600 }}
+                              >
+                                Standups
+                              </Button>
+                            </Box>
                             {/* Project Details Section */}
                             <Box sx={{ display: 'flex', gap: 4, flexWrap: 'nowrap', overflowX: 'auto', mb: 3 }}>
                               <Box sx={{ minWidth: 200, flex: '1 1 auto' }}>
