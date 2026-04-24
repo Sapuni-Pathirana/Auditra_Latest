@@ -6,6 +6,9 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'dart:io';
 import '../services/api_service.dart';
+import '../services/network_service.dart';
+import '../services/offline_db_service.dart';
+import '../services/offline_storage_service.dart';
 import '../services/pdf_service.dart';
 import '../models/project_model.dart';
 import '../models/valuation_model.dart';
@@ -858,6 +861,33 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     setState(() => _isSubmitting = true);
 
     try {
+      // Offline fallback: queue submission and auto-sync when online again.
+      final offlineModeEnabled = await OfflineDBService.isOfflineModeEnabled();
+      if (offlineModeEnabled) {
+        if (!NetworkService.isInitialized) {
+          await NetworkService.init();
+        }
+        final isOnline = await NetworkService.checkConnectivity();
+        if (!isOnline) {
+          await OfflineStorageService.queueValuationSubmissionOffline(
+            valuationId: _valuationId!,
+            projectId: widget.project.id,
+            projectTitle: widget.project.title,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No internet. Report submission queued and will auto-submit when online.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 4),
+              ),
+            );
+            Navigator.of(context).pop(true);
+          }
+          return;
+        }
+      }
+
       // Fetch the latest valuation data to generate the PDF
       final valResult = await ApiService.getValuation(_valuationId!);
       if (valResult['success'] && valResult['data'] != null) {
@@ -896,6 +926,35 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         }
       }
     } catch (e) {
+      final errorText = e.toString();
+      final isNetworkFailure =
+          e is SocketException ||
+          errorText.contains('ClientException') ||
+          errorText.contains('Connection failed') ||
+          errorText.contains('Connection refused') ||
+          errorText.contains('Failed host lookup') ||
+          errorText.contains('Network is unreachable') ||
+          errorText.contains('timed out');
+
+      if (isNetworkFailure && await OfflineDBService.isOfflineModeEnabled()) {
+        await OfflineStorageService.queueValuationSubmissionOffline(
+          valuationId: _valuationId!,
+          projectId: widget.project.id,
+          projectTitle: widget.project.title,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Network lost. Report submission queued and will auto-submit when online.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+          Navigator.of(context).pop(true);
+        }
+        return;
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

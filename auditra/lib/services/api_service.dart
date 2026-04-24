@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'network_service.dart';
+import 'offline_db_service.dart';
+import 'offline_storage_service.dart';
 
 class ApiService {
   // Change this to your computer's IP address when testing on physical device
@@ -1865,6 +1868,25 @@ class ApiService {
 
   static Future<Map<String, dynamic>> createValuation(Map<String, dynamic> valuationData) async {
     try {
+      // Field officers can work fully offline: queue valuation locally when
+      // there is no real network/backend connectivity.
+      final offlineModeEnabled = await OfflineDBService.isOfflineModeEnabled();
+      if (offlineModeEnabled) {
+        if (!NetworkService.isInitialized) {
+          await NetworkService.init();
+        }
+        final isOnline = await NetworkService.checkConnectivity();
+        if (!isOnline) {
+          final localId = await OfflineStorageService.saveValuationOffline(valuationData);
+          return {
+            'success': true,
+            'synced': false,
+            'data': {'localId': localId, ...valuationData},
+            'message': 'Saved offline. Will sync automatically when online.',
+          };
+        }
+      }
+
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('access_token');
 
@@ -1944,6 +1966,32 @@ class ApiService {
         return {'success': false, 'message': errorMessage};
       }
     } catch (e) {
+      // Network failures in offline mode should queue locally instead of showing
+      // a blocking connection error to field officers.
+      final errorText = e.toString();
+      final isNetworkFailure =
+          e is SocketException ||
+          errorText.contains('ClientException') ||
+          errorText.contains('Connection failed') ||
+          errorText.contains('Connection refused') ||
+          errorText.contains('Failed host lookup') ||
+          errorText.contains('Network is unreachable') ||
+          errorText.contains('timed out');
+
+      if (isNetworkFailure && await OfflineDBService.isOfflineModeEnabled()) {
+        try {
+          final localId = await OfflineStorageService.saveValuationOffline(valuationData);
+          return {
+            'success': true,
+            'synced': false,
+            'data': {'localId': localId, ...valuationData},
+            'message': 'Saved offline. Will sync automatically when online.',
+          };
+        } catch (_) {
+          // Fall through to the original connection error if offline queue fails.
+        }
+      }
+
       return {'success': false, 'message': 'Connection error: $e'};
     }
   }

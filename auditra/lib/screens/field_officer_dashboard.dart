@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math' as math;
 import '../services/api_service.dart';
+import '../services/offline_db_service.dart';
+import '../services/offline_storage_service.dart';
+import '../services/network_service.dart';
 import '../models/attendance_model.dart';
 import '../models/project_model.dart';
 import 'login_screen.dart';
@@ -49,6 +53,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
   // Leave statistics state
   Map<String, dynamic>? _leaveStatistics;
   bool _isLoadingLeaveStats = false;
+  StreamSubscription<bool>? _networkSubscription;
+  bool _wasOnline = true;
 
   @override
   void initState() {
@@ -60,13 +66,40 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
       }
     });
     _loadUserInfo();
+    _loadCachedProjectsOnStartup();
     _loadProjects();
+    _setupNetworkAutoRefresh();
   }
 
   @override
   void dispose() {
+    _networkSubscription?.cancel();
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _setupNetworkAutoRefresh() async {
+    if (!NetworkService.isInitialized) {
+      await NetworkService.init();
+    }
+    _wasOnline = NetworkService.isOnline;
+    _networkSubscription = NetworkService.networkStatusStream.listen((isOnline) {
+      if (!mounted) return;
+      // Auto refresh only on offline -> online transition.
+      if (!_wasOnline && isOnline) {
+        _loadProjects();
+        _loadTodayAttendance();
+        _loadSummary();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Back online. Data refreshed automatically.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      _wasOnline = isOnline;
+    });
   }
 
   Future<void> _loadUserInfo() async {
@@ -167,6 +200,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
           try {
             final data = result['data'] as List<dynamic>;
             _projects = data.map((p) => Project.fromJson(p)).toList();
+            // Keep a local cache for offline project loading.
+            OfflineStorageService.cacheProjects(_projects);
           } catch (e) {
             print('Error parsing projects: $e');
             print('Response data: ${result['data']}');
@@ -178,14 +213,48 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
             );
           }
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to load projects: ${result['message'] ?? 'Unknown error'}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          final cached = OfflineStorageService.getCachedProjects();
+          if (cached != null && cached.isNotEmpty) {
+            _projects = cached;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Offline mode: showing cached projects.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          } else {
+            final rawMessage = (result['message'] ?? '').toString();
+            final isNetworkError = rawMessage.contains('Connection error') ||
+                rawMessage.contains('Network is unreachable') ||
+                rawMessage.contains('Connection failed') ||
+                rawMessage.contains('Failed host lookup');
+            final message = isNetworkError
+                ? 'You are offline. Projects will load when internet is back.'
+                : 'Failed to load projects: ${result['message'] ?? 'Unknown error'}';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
       });
+    }
+  }
+
+  Future<void> _loadCachedProjectsOnStartup() async {
+    try {
+      await OfflineDBService.initOfflineDB();
+      final cached = OfflineStorageService.getCachedProjects();
+      if (!mounted) return;
+      if (cached != null && cached.isNotEmpty) {
+        setState(() {
+          _projects = cached;
+        });
+      }
+    } catch (_) {
+      // Best-effort cache read; ignore and continue with live load.
     }
   }
 
