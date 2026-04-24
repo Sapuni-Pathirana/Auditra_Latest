@@ -257,7 +257,11 @@ class ProjectListView(generics.ListCreateAPIView):
         # Process client info - check/create account and assign to project
         client_info = project.client_info
         if client_info and client_info.get('email'):
-            client_user, was_created, error = process_client_for_project(project, client_info)
+            client_user, was_created, error = process_client_for_project(
+                project,
+                client_info,
+                invited_by=self.request.user,
+            )
             if error:
                 logger.warning(f"Client processing warning for project {project.id}: {error}")
             elif client_user:
@@ -271,7 +275,11 @@ class ProjectListView(generics.ListCreateAPIView):
         # Process agent info - check/create account and assign to project
         agent_info = project.agent_info
         if agent_info and agent_info.get('email'):
-            agent_user, was_created, error = process_agent_for_project(project, agent_info)
+            agent_user, was_created, error = process_agent_for_project(
+                project,
+                agent_info,
+                invited_by=self.request.user,
+            )
             if error:
                 logger.warning(f"Agent processing warning for project {project.id}: {error}")
             elif agent_user:

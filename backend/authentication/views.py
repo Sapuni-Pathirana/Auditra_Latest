@@ -3013,7 +3013,28 @@ class InvitationListView(APIView):
             qs = qs.filter(status=inv_status)
 
         data = []
+        from projects.models import Project
         for inv in qs[:200]:
+            inviter_name = None
+            if inv.invited_by:
+                inviter_name = inv.invited_by.get_full_name() or inv.invited_by.username
+            elif inv.user_id:
+                # Backfill legacy rows where invited_by was not stored:
+                # infer the coordinator from first related project assignment.
+                p = (
+                    Project.objects.filter(assigned_client_id=inv.user_id)
+                    .select_related('coordinator')
+                    .order_by('-created_at')
+                    .first()
+                ) or (
+                    Project.objects.filter(assigned_agent_id=inv.user_id)
+                    .select_related('coordinator')
+                    .order_by('-created_at')
+                    .first()
+                )
+                if p and p.coordinator:
+                    inviter_name = p.coordinator.get_full_name() or p.coordinator.username
+
             data.append({
                 'id': inv.id,
                 'email': inv.email,
@@ -3022,10 +3043,7 @@ class InvitationListView(APIView):
                 'sent_at': inv.sent_at,
                 'updated_at': inv.updated_at,
                 'user_id': inv.user_id,
-                'invited_by': (
-                    (inv.invited_by.get_full_name() or inv.invited_by.username)
-                    if inv.invited_by else None
-                ),
+                'invited_by': inviter_name,
             })
         return Response(data)
 
