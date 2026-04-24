@@ -26,6 +26,7 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   bool _loading = true;
   bool _sending = false;
   String _kind = 'free';
+  String? _currentUsername;
 
   // Mention autocomplete state
   String? _mentionQuery;
@@ -38,8 +39,15 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCurrentUsername();
     _loadAll();
     _connectWebSocket();
+  }
+
+  Future<void> _loadCurrentUsername() async {
+    final username = await ApiService.getUsername();
+    if (!mounted) return;
+    setState(() => _currentUsername = username);
   }
 
   @override
@@ -184,9 +192,24 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.projectTitle ?? 'Daily Standup'),
+        titleSpacing: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.projectTitle ?? 'Daily Standup'),
+            Text(
+              'Daily Standup',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withOpacity(0.85),
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: SafeArea(
         child: Column(
@@ -200,14 +223,13 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
                         )
                       : ListView.builder(
                           controller: _scrollController,
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                           itemCount: _messages.length,
                           itemBuilder: (ctx, i) => _buildMessage(_messages[i]),
                         ),
             ),
             if (_filteredMembers.isNotEmpty && _mentionQuery != null)
               _buildMentionList(),
-            const Divider(height: 1),
             _buildTemplateBar(),
             _buildInputBar(),
           ],
@@ -218,9 +240,14 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
 
   Widget _buildMessage(Map<String, dynamic> msg) {
     final author = (msg['author_name'] ?? '').toString();
+    final authorUsername = (msg['author_username'] ?? '').toString();
     final role = (msg['author_role'] ?? '').toString();
     final body = (msg['body'] ?? '').toString();
     final kind = (msg['kind'] ?? 'free').toString();
+    final createdAt = (msg['created_at'] ?? '').toString();
+    final isMine = _currentUsername != null && authorUsername == _currentUsername;
+    final seenBy = ((msg['seen_by'] is List) ? List<Map<String, dynamic>>.from(msg['seen_by']) : <Map<String, dynamic>>[]);
+    final seenByOthers = seenBy.where((u) => (u['username'] ?? '').toString() != authorUsername).toList();
     final kindLabel = {
       'work_to_do': 'Work To Do',
       'work_done': 'Work Done',
@@ -230,69 +257,199 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
       'work_done': Colors.green,
     }[kind];
 
+    final bubbleColor = isMine ? const Color(0xFFDCF8C6) : Colors.white;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: AppColors.primary.withOpacity(0.15),
-            child: Text(
-              author.isNotEmpty ? author[0].toUpperCase() : '?',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+          if (!isMine) ...[
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: AppColors.primary.withOpacity(0.15),
+              child: Text(
+                author.isNotEmpty ? author[0].toUpperCase() : '?',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(author, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 6),
-                    Text(role, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                    if (kindLabel != null) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: kindColor!.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
+            const SizedBox(width: 8),
+          ],
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: bubbleColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: isMine ? const Color(0xFFB7E3A2) : Colors.grey.shade300),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x14000000), blurRadius: 2, offset: Offset(0, 1)),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          kindLabel,
-                          style: TextStyle(color: kindColor, fontSize: 10, fontWeight: FontWeight.w600),
+                          author,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: isMine ? Colors.green.shade800 : AppColors.primary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      Text(
+                        _formatTime(createdAt),
+                        style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                      ),
                     ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          role,
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (kindLabel != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: kindColor!.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            kindLabel,
+                            style: TextStyle(color: kindColor, fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  _buildMessageBody(body),
+                  if (isMine) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      seenByOthers.isNotEmpty
+                          ? 'Seen by: ${seenByOthers.map((u) => (u['name'] ?? u['username'] ?? '').toString()).where((s) => s.isNotEmpty).join(', ')}'
+                          : 'Sent',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
-                ),
-                const SizedBox(height: 2),
-                Text(body, style: const TextStyle(fontSize: 14, height: 1.4)),
-              ],
+                ],
+              ),
             ),
           ),
+          if (isMine) ...[
+            const SizedBox(width: 8),
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: AppColors.primary.withOpacity(0.15),
+              child: Text(
+                author.isNotEmpty ? author[0].toUpperCase() : '?',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  String _formatTime(String isoTime) {
+    if (isoTime.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(isoTime).toLocal();
+      final hh = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final mm = dt.minute.toString().padLeft(2, '0');
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      return '$hh:$mm $ampm';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _formatRole(String role) {
+    if (role.isEmpty) return '';
+    return role
+        .split('_')
+        .map((p) => p.isEmpty ? p : '${p[0].toUpperCase()}${p.substring(1)}')
+        .join(' ');
+  }
+
+  Widget _buildMessageBody(String body) {
+    final words = body.split(RegExp(r'\s+'));
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+        children: words.map((word) {
+          final isMention = word.startsWith('@');
+          return TextSpan(
+            text: '$word ',
+            style: isMention
+                ? const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)
+                : null,
+          );
+        }).toList(),
       ),
     );
   }
 
   Widget _buildMentionList() {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 160),
-      color: Colors.grey[100],
-      child: ListView.builder(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      constraints: const BoxConstraints(maxHeight: 180),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ListView.separated(
         shrinkWrap: true,
         itemCount: _filteredMembers.length,
+        separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
         itemBuilder: (ctx, i) {
           final m = _filteredMembers[i];
+          final username = (m['username'] ?? '').toString();
+          final role = _formatRole((m['role'] ?? '').toString());
           return ListTile(
             dense: true,
-            leading: CircleAvatar(radius: 14, child: Text(((m['username'] ?? '?').toString())[0].toUpperCase(), style: const TextStyle(fontSize: 12))),
-            title: Text((m['username'] ?? '').toString()),
-            subtitle: Text((m['role'] ?? '').toString()),
+            leading: CircleAvatar(
+              radius: 15,
+              backgroundColor: AppColors.primary.withOpacity(0.12),
+              child: Text(
+                username.isNotEmpty ? username[0].toUpperCase() : '?',
+                style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w700),
+              ),
+            ),
+            title: Text(
+              '@$username',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            subtitle: Text(
+              role,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
             onTap: () => _insertMention(m),
           );
         },
@@ -301,22 +458,68 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   }
 
   Widget _buildTemplateBar() {
+    Widget floatingKindButton({
+      required String label,
+      required IconData icon,
+      required String value,
+      required Color activeColor,
+    }) {
+      final selected = _kind == value;
+      return Material(
+        color: Colors.transparent,
+        elevation: selected ? 3 : 1.5,
+        shadowColor: selected ? activeColor.withOpacity(0.35) : Colors.black26,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => setState(() => _kind = selected ? 'free' : value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected ? activeColor.withOpacity(0.15) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? activeColor : Colors.grey.shade300,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 14, color: selected ? activeColor : Colors.grey.shade700),
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? activeColor : Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
       child: Row(
         children: [
-          ChoiceChip(
-            label: const Text('Work To Do'),
-            selected: _kind == 'work_to_do',
-            onSelected: (_) => setState(() => _kind = _kind == 'work_to_do' ? 'free' : 'work_to_do'),
-            selectedColor: Colors.orange.shade100,
+          floatingKindButton(
+            label: 'Work To Do',
+            icon: Icons.assignment_late_outlined,
+            value: 'work_to_do',
+            activeColor: Colors.orange.shade700,
           ),
-          const SizedBox(width: 8),
-          ChoiceChip(
-            label: const Text('Work Done'),
-            selected: _kind == 'work_done',
-            onSelected: (_) => setState(() => _kind = _kind == 'work_done' ? 'free' : 'work_done'),
-            selectedColor: Colors.green.shade100,
+          const SizedBox(width: 10),
+          floatingKindButton(
+            label: 'Work Done',
+            icon: Icons.task_alt_rounded,
+            value: 'work_done',
+            activeColor: Colors.green.shade700,
           ),
         ],
       ),
@@ -324,36 +527,90 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   }
 
   Widget _buildInputBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              onChanged: _onTextChanged,
-              maxLines: 4,
-              minLines: 1,
-              decoration: InputDecoration(
-                hintText: 'Type a message. Use @ to mention.',
-                filled: true,
-                fillColor: Colors.grey[100],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 6),
+            child: Text(
+              'Use @ to mention a teammate',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: _sending ? null : _send,
-            icon: _sending
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.send),
-            color: AppColors.primary,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  onChanged: _onTextChanged,
+                  maxLines: 4,
+                  minLines: 1,
+                  decoration: InputDecoration(
+                    hintText: 'Type a message...',
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                decoration: BoxDecoration(
+                  color: _controller.text.trim().isEmpty ? Colors.grey.shade300 : AppColors.primary,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: _controller.text.trim().isEmpty
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: AppColors.primary.withOpacity(0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                ),
+                child: IconButton(
+                  onPressed: _sending ? null : _send,
+                  icon: _sending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.send_rounded),
+                  color: Colors.white,
+                ),
+              ),
+            ],
           ),
         ],
       ),
