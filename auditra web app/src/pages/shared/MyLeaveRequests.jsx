@@ -35,6 +35,7 @@ const defaultForm = {
 export default function MyLeaveRequests() {
   const [requests, setRequests] = useState([]);
   const [balance, setBalance] = useState(null);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [cancelDialog, setCancelDialog] = useState({ open: false, id: null });
@@ -46,13 +47,15 @@ export default function MyLeaveRequests() {
 
   const fetchData = async () => {
     try {
-      const [reqRes, balRes] = await Promise.all([
+      const [reqRes, balRes, statsRes] = await Promise.all([
         axiosClient.get('/auth/leave-requests/my/'),
         axiosClient.get('/auth/leave-balance/').catch(() => null),
+        axiosClient.get('/auth/leave-requests/statistics/').catch(() => null),
       ]);
       const list = reqRes.data?.results ?? reqRes.data?.data ?? reqRes.data ?? [];
       setRequests(Array.isArray(list) ? list : []);
       if (balRes) setBalance(balRes.data);
+      if (statsRes?.data?.success) setStats(statsRes.data.data);
     } catch {
       setError('Failed to load data');
     } finally {
@@ -111,8 +114,10 @@ export default function MyLeaveRequests() {
 
   // Aggregate all leave types for summary display
   const allBalances = balance?.balances ?? [];
-  const usedDays = allBalances.reduce((s, b) => s + (b.used ?? 0), 0);
-  const allocatedDays = allBalances.reduce((s, b) => s + (b.quota ?? 0), 45);
+  const allocatedFromBalance = allBalances.reduce((s, b) => s + (Number(b.quota) || 0), 0);
+  const usedFromBalance = allBalances.reduce((s, b) => s + (Number(b.used) || 0), 0);
+  const allocatedDays = Number(stats?.total_leave_days) || (allocatedFromBalance > 0 ? allocatedFromBalance : 45);
+  const usedDays = Number(stats?.approved_days) || usedFromBalance;
 
   return (
     <Box>
