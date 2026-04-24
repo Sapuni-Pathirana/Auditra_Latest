@@ -1,8 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
 import '../services/api_service.dart';
 import '../theme/app_colors.dart';
 
@@ -44,20 +41,19 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
   Future<void> _loadVisits() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token');
-      final response = await http.get(
-        Uri.parse('${ApiService.baseUrl}/projects/${widget.projectId}/visits/'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as List;
+      final res = await ApiService.getProjectVisits(widget.projectId);
+      if (res['success'] == true) {
+        final raw = res['data'];
+        final data = raw is List ? raw : <dynamic>[];
         setState(() {
           _visits = List<Map<String, dynamic>>.from(data);
           _loading = false;
         });
       } else {
-        setState(() { _error = 'Failed to load visits'; _loading = false; });
+        setState(() {
+          _error = (res['message'] ?? 'Failed to load valuation dates').toString();
+          _loading = false;
+        });
       }
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });
@@ -102,28 +98,21 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
     if (confirmed != true || !mounted) return;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token');
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/projects/${widget.projectId}/visits/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'scheduled_date': DateFormat('yyyy-MM-dd').format(picked),
-          'notes': notesCtrl.text.trim(),
-        }),
+      final res = await ApiService.scheduleProjectVisit(
+        projectId: widget.projectId,
+        scheduledDate: picked,
+        notes: notesCtrl.text.trim(),
       );
 
-      if (response.statusCode == 201 && mounted) {
+      if (res['success'] == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Visit scheduled. Client will be notified.'), backgroundColor: AppColors.success),
         );
         _loadVisits();
       } else if (mounted) {
+        final message = (res['message'] ?? 'Failed to schedule visit').toString();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to schedule visit'), backgroundColor: AppColors.error),
+          SnackBar(content: Text(message), backgroundColor: AppColors.error),
         );
       }
     } catch (e) {

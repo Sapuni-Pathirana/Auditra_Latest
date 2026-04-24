@@ -8,6 +8,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, generics, serializers
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -3298,7 +3299,9 @@ class ProjectVisitModelSerializer(drf_serializers.ModelSerializer):
     class Meta:
         model = ProjectVisit
         fields = ['id', 'project', 'field_officer', 'field_officer_name', 'scheduled_date', 'note', 'notes', 'status', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'field_officer', 'field_officer_name', 'created_at', 'updated_at']
+        # project and field_officer are injected by the view (URL + authenticated user)
+        # so clients (mobile/web) should not be forced to send them in payload.
+        read_only_fields = ['id', 'project', 'field_officer', 'field_officer_name', 'created_at', 'updated_at']
 
     def get_field_officer_name(self, obj):
         return obj.field_officer.get_full_name() or obj.field_officer.username

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
@@ -903,6 +904,123 @@ class ApiService {
       }
     } catch (e) {
       return {'success': false, 'message': 'Connection error: ${e.toString()}'};
+    }
+  }
+
+  // Project visit scheduling (Field Officer)
+  static Future<Map<String, dynamic>> getProjectVisits(int projectId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var token = prefs.getString('access_token');
+      if (token == null) return {'success': false, 'message': 'Not authenticated'};
+
+      var response = await http.get(
+        Uri.parse('$baseUrl/projects/$projectId/visits/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 401) {
+        final refreshResult = await refreshToken();
+        if (refreshResult['success'] == true) {
+          token = prefs.getString('access_token');
+          response = await http.get(
+            Uri.parse('$baseUrl/projects/$projectId/visits/'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          );
+        } else {
+          return {
+            'success': false,
+            'message': refreshResult['message'] ?? 'Session expired. Please login again.',
+          };
+        }
+      }
+
+      final dynamic data = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+      if (response.statusCode == 200) {
+        final visits = data is List ? data : (data is Map<String, dynamic> ? (data['results'] ?? <dynamic>[]) : <dynamic>[]);
+        return {'success': true, 'data': visits};
+      }
+      final message = data is Map<String, dynamic>
+          ? (data['detail'] ?? data['error'] ?? data['message'] ?? 'Failed to load valuation dates')
+          : 'Failed to load valuation dates';
+      return {'success': false, 'message': message.toString()};
+    } catch (e) {
+      return {'success': false, 'message': 'Connection error: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> scheduleProjectVisit({
+    required int projectId,
+    required DateTime scheduledDate,
+    String? notes,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var token = prefs.getString('access_token');
+      if (token == null) return {'success': false, 'message': 'Not authenticated'};
+
+      var response = await http.post(
+        Uri.parse('$baseUrl/projects/$projectId/visits/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'scheduled_date': DateFormat('yyyy-MM-dd').format(scheduledDate),
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        }),
+      );
+
+      if (response.statusCode == 401) {
+        final refreshResult = await refreshToken();
+        if (refreshResult['success'] == true) {
+          token = prefs.getString('access_token');
+          response = await http.post(
+            Uri.parse('$baseUrl/projects/$projectId/visits/'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'scheduled_date': DateFormat('yyyy-MM-dd').format(scheduledDate),
+              if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+            }),
+          );
+        } else {
+          return {
+            'success': false,
+            'message': refreshResult['message'] ?? 'Session expired. Please login again.',
+          };
+        }
+      }
+
+      final dynamic data = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {'success': true, 'data': data};
+      }
+
+      String message = 'Failed to set valuation date';
+      if (data is Map<String, dynamic>) {
+        final detail = data['detail'] ?? data['error'] ?? data['message'];
+        if (detail is String && detail.trim().isNotEmpty) {
+          message = detail;
+        } else {
+          // DRF validation error map
+          final firstValue = data.values.isNotEmpty ? data.values.first : null;
+          if (firstValue is List && firstValue.isNotEmpty) {
+            message = firstValue.first.toString();
+          }
+        }
+      }
+      return {'success': false, 'message': message};
+    } catch (e) {
+      return {'success': false, 'message': 'Connection error: $e'};
     }
   }
 
