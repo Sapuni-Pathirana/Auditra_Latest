@@ -3022,7 +3022,10 @@ class InvitationListView(APIView):
                 'sent_at': inv.sent_at,
                 'updated_at': inv.updated_at,
                 'user_id': inv.user_id,
-                'invited_by': inv.invited_by.get_full_name() if inv.invited_by else None,
+                'invited_by': (
+                    (inv.invited_by.get_full_name() or inv.invited_by.username)
+                    if inv.invited_by else None
+                ),
             })
         return Response(data)
 
