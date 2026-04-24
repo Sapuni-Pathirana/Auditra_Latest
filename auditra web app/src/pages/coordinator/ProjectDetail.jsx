@@ -4,7 +4,7 @@ import {
   Box, Typography, Card, CardContent, Grid, Chip, Button, Alert,
   Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
   Divider, IconButton, Tooltip, FormControl, InputLabel, TextField,
-  LinearProgress, OutlinedInput, Checkbox, ListItemText,
+  LinearProgress, OutlinedInput, Checkbox, ListItemText, CircularProgress,
 } from '@mui/material';
 import {
   ArrowBack, PersonAdd, PlayArrow, CheckCircle, Cancel, Lock, Edit,
@@ -327,16 +327,57 @@ export default function ProjectDetail() {
     setDocVisibilityDialog({ open: false, file: null });
     setDocUploading(true);
     setError('');
+    const tempId = `temp-${Date.now()}`;
+    const tempDoc = {
+      id: tempId,
+      name: file.name.replace(/\.[^/.]+$/, ''),
+      file_size: file.size,
+      uploaded_at: new Date().toISOString(),
+      uploaded_by_username: 'Uploading...',
+      file_url: '',
+      _optimistic: true,
+    };
+    // Show uploaded item instantly in UI before server response.
+    setProject((prev) => {
+      if (!prev) return prev;
+      const existing = Array.isArray(prev.documents) ? prev.documents : [];
+      return { ...prev, documents: [tempDoc, ...existing] };
+    });
     try {
-      await projectService.uploadDocument({
+      const res = await projectService.uploadDocument({
         project: id,
         file,
         name: file.name.replace(/\.[^/.]+$/, ''),
         visible_to_ids: docVisibleTo,
       });
+      const createdDoc = res?.data?.id ? res.data : (res?.data?.data?.id ? res.data.data : null);
+      if (createdDoc?.id) {
+        // Replace optimistic row with authoritative server row.
+        setProject((prev) => {
+          if (!prev) return prev;
+          const existing = Array.isArray(prev.documents) ? prev.documents : [];
+          const deduped = existing.filter((d) => d.id !== tempId && d.id !== createdDoc.id);
+          return { ...prev, documents: [createdDoc, ...deduped] };
+        });
+      } else {
+        // If response shape is unexpected, remove optimistic row and fallback to full refresh.
+        setProject((prev) => {
+          if (!prev) return prev;
+          const existing = Array.isArray(prev.documents) ? prev.documents : [];
+          return { ...prev, documents: existing.filter((d) => d.id !== tempId) };
+        });
+      }
+      // Ensure auto-refresh after upload (immediate + delayed consistency refresh).
       await fetchProject();
+      setTimeout(() => { fetchProject(); }, 800);
       setSuccess('Document uploaded successfully');
     } catch {
+      // Roll back optimistic row on failure.
+      setProject((prev) => {
+        if (!prev) return prev;
+        const existing = Array.isArray(prev.documents) ? prev.documents : [];
+        return { ...prev, documents: existing.filter((d) => d.id !== tempId) };
+      });
       setError(`Failed to upload ${file.name}`);
     } finally {
       setDocUploading(false);
@@ -346,11 +387,21 @@ export default function ProjectDetail() {
   const handleDeleteDocument = async (docId) => {
     setDeletingDocId(docId);
     setError('');
+    // Optimistic remove for instant UI feedback.
+    setProject((prev) => {
+      if (!prev) return prev;
+      const existing = Array.isArray(prev.documents) ? prev.documents : [];
+      return { ...prev, documents: existing.filter((d) => d.id !== docId) };
+    });
     try {
       await projectService.deleteDocument(docId);
       setSuccess('Document deleted');
+      // Ensure auto-refresh after delete (immediate + delayed consistency refresh).
       await fetchProject();
+      setTimeout(() => { fetchProject(); }, 800);
     } catch {
+      // Re-sync if optimistic delete was wrong due to API failure.
+      await fetchProject();
       setError('Failed to delete document');
     } finally {
       setDeletingDocId(null);
@@ -406,6 +457,21 @@ export default function ProjectDetail() {
   const allAssigned = requiredAssignments.every(r => r.assigned);
   const isAdminApproved = project.admin_approval_status === 'not_required' || project.admin_approval_status === 'approved';
   const canStartProject = allAssigned && isPaymentApproved && isAdminApproved;
+  const visibilityMembers = [
+    { id: project.coordinator, name: project.coordinator_name || project.coordinator_username, role: 'Coordinator' },
+    { id: project.assigned_field_officer, name: project.assigned_field_officer_name || project.assigned_field_officer_username, role: 'Field Officer' },
+    { id: project.assigned_accessor, name: project.assigned_accessor_name || project.assigned_accessor_username, role: 'Accessor' },
+    { id: project.assigned_senior_valuer, name: project.assigned_senior_valuer_name || project.assigned_senior_valuer_username, role: 'Senior Valuer' },
+    { id: project.assigned_client, name: project.assigned_client_name || project.assigned_client_username, role: 'Client' },
+    { id: project.assigned_agent, name: project.assigned_agent_name || project.assigned_agent_username, role: 'Agent' },
+  ]
+    .filter((m) => m.id && m.name)
+    .reduce((acc, member) => {
+      if (!acc.some((m) => Number(m.id) === Number(member.id))) {
+        acc.push(member);
+      }
+      return acc;
+    }, []);
 
   return (
     <Box>
@@ -1079,24 +1145,43 @@ export default function ProjectDetail() {
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{doc.name}</Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {formatFileSize(doc.file_size)} &middot; Uploaded {formatDate(doc.uploaded_at)}
-                        {doc.uploaded_by_username ? ` by ${doc.uploaded_by_username}` : ''}
+                        {doc._optimistic ? (
+                          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                            <CircularProgress size={10} />
+                            Uploading...
+                          </Box>
+                        ) : (
+                          <>
+                            {formatFileSize(doc.file_size)} &middot; Uploaded {formatDate(doc.uploaded_at)}
+                            {doc.uploaded_by_username ? ` by ${doc.uploaded_by_username}` : ''}
+                          </>
+                        )}
                       </Typography>
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                    <Tooltip title="View">
-                      <IconButton size="small" href={doc.file_url} target="_blank" component="a">
-                        <Visibility fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    {doc._optimistic ? (
+                      <Tooltip title="Uploading...">
+                        <span>
+                          <IconButton size="small" disabled>
+                            <Visibility fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <Tooltip title="View">
+                        <IconButton size="small" href={doc.file_url} target="_blank" component="a">
+                          <Visibility fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                     {isCoordinator && (
                       <Tooltip title="Delete">
                         <IconButton
                           size="small"
                           color="error"
                           onClick={() => handleDeleteDocument(doc.id)}
-                          disabled={deletingDocId === doc.id}
+                          disabled={deletingDocId === doc.id || !!doc._optimistic}
                         >
                           <Delete fontSize="small" />
                         </IconButton>
@@ -1456,18 +1541,17 @@ export default function ProjectDetail() {
               value={docVisibleTo}
               onChange={(e) => setDocVisibleTo(e.target.value)}
               input={<OutlinedInput label="Visible To" />}
-              renderValue={(selected) => selected.map(uid => {
-                const member = (project?.assignees || []).find(a => a.user?.id === uid || a.id === uid);
-                return member?.user?.full_name || member?.full_name || uid;
-              }).join(', ')}
+              renderValue={(selected) => selected
+                .map((uid) => visibilityMembers.find((m) => Number(m.id) === Number(uid))?.name || uid)
+                .join(', ')}
             >
-              {(project?.assignees || []).map((a) => {
-                const userId = a.user?.id ?? a.id;
-                const name = a.user?.full_name ?? a.full_name ?? a.user?.username ?? 'Unknown';
+              {visibilityMembers.map((member) => {
+                const userId = Number(member.id);
+                const name = member.name;
                 return (
                   <MenuItem key={userId} value={userId}>
-                    <Checkbox checked={docVisibleTo.includes(userId)} />
-                    <ListItemText primary={name} secondary={a.role ?? ''} />
+                    <Checkbox checked={docVisibleTo.some((id) => Number(id) === userId)} />
+                    <ListItemText primary={name} secondary={member.role} />
                   </MenuItem>
                 );
               })}

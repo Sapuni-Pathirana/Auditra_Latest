@@ -1123,17 +1123,17 @@ class ProjectDocumentView(generics.CreateAPIView):
             ],
             category='project',
             severity='success',
-            title=f'Project started — {project.title}',
-            message='Project status is now In Progress.',
-            meta={'project_id': project.id, 'status': 'in_progress'},
+            title=f'New document uploaded — {project.title}',
+            message=f'"{doc.name}" was uploaded to the project documents.',
+            meta={'project_id': project.id, 'document_id': doc.id},
             action_url=f'/dashboard/projects/{project.id}',
-            actor=request.user,
+            actor=self.request.user,
         )
 
         # Feature #3 (C1): notify recipients of a new document.
         try:
             from notifications.services import notify
-            doc_title = getattr(doc, 'title', None) or 'Document'
+            doc_title = getattr(doc, 'name', None) or 'Document'
             title = f'New document on {project.title}'
             msg = f'"{doc_title}" was uploaded by {self.request.user.get_full_name() or self.request.user.username}.'
             meta = {'project_id': project.id, 'document_id': doc.id}
@@ -1179,13 +1179,13 @@ class ProjectDocumentDeleteView(generics.DestroyAPIView):
 
     def perform_destroy(self, instance):
         project = instance.project
-        doc_name = instance.title if hasattr(instance, 'title') else str(instance.id)
+        doc_name = getattr(instance, 'name', None) or str(instance.id)
         instance.delete()
 
         try:
             from system_logs.utils import log_action, get_client_ip
             log_action(
-                action='DOCUMENT_UPLOADED',
+                action='DOCUMENT_DELETED',
                 user=self.request.user,
                 description=f"Document deleted from project: {project.title} (ID: {project.id})",
                 category='project',
@@ -1195,14 +1195,21 @@ class ProjectDocumentDeleteView(generics.DestroyAPIView):
         except Exception:
             pass
         _notify_project_users(
-            [project.assigned_agent],
-            category='payment',
+            [
+                project.coordinator,
+                project.assigned_field_officer,
+                project.assigned_client,
+                project.assigned_agent,
+                project.assigned_accessor,
+                project.assigned_senior_valuer,
+            ],
+            category='project',
             severity='success',
-            title=f'Agent payment recorded — {project.title}',
-            message=f'Your payment of Rs. {amount:,.2f} has been recorded.',
-            meta={'project_id': project.id, 'amount': str(amount)},
+            title=f'Document deleted — {project.title}',
+            message=f'"{doc_name}" was removed from project documents.',
+            meta={'project_id': project.id, 'document': doc_name},
             action_url=f'/dashboard/projects/{project.id}',
-            actor=request.user,
+            actor=self.request.user,
         )
 
         # Feature #3 (C1): tell the coordinator when someone else deletes a document.
