@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'dart:io';
+import 'dart:math' as math;
 import '../services/api_service.dart';
 import '../services/network_service.dart';
 import '../services/offline_db_service.dart';
@@ -44,6 +45,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
   
   // Appreciation/Depreciation calculation fields
   String? _calculationType; // 'appreciation' or 'depreciation'
+  String? _calculationMethod; // selected method under type
   final _rateController = TextEditingController();
   final _yearsController = TextEditingController();
   final _newPriceController = TextEditingController();
@@ -90,6 +92,25 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
   // Feature #12: depreciation override state (set by DepreciationWidget)
   Map<String, dynamic>? _depreciationResult;
 
+  static const Map<String, String> _calculationMethodLabels = {
+    'simple_interest': 'Simple Interest',
+    'compound_annual': 'Compound (Annual)',
+    'compound_monthly': 'Compound (Monthly)',
+    'straight_line': 'Straight Line',
+    'reducing_balance': 'Reducing Balance',
+    'double_declining': 'Double Declining',
+  };
+
+  List<String> get _availableMethods {
+    if (_calculationType == 'appreciation') {
+      return const ['simple_interest', 'compound_annual', 'compound_monthly'];
+    }
+    if (_calculationType == 'depreciation') {
+      return const ['straight_line', 'reducing_balance', 'double_declining'];
+    }
+    return const [];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -115,6 +136,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
       String? notes = valuation.notes;
       String? baseValueStr;
       String? adjustmentType;
+      String? methodStr;
       String? rateStr;
       String? yearsStr;
       String? calculatedValueStr;
@@ -148,6 +170,20 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
             }
           }
           
+          // Extract Rate
+          final methodRegex = RegExp(r'Method:\s*([A-Za-z _()-]+)', caseSensitive: false);
+          final methodMatch = methodRegex.firstMatch(calculationData);
+          if (methodMatch != null) {
+            final raw = (methodMatch.group(1) ?? '').trim().toLowerCase();
+            final slug = raw
+                .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+                .replaceAll(RegExp(r'_+'), '_')
+                .replaceAll(RegExp(r'^_|_$'), '');
+            if (slug.isNotEmpty) {
+              methodStr = slug;
+            }
+          }
+
           // Extract Rate
           final rateRegex = RegExp(r'Rate:\s*([\d,]+\.?\d*)\s*%', caseSensitive: false);
           final rateMatch = rateRegex.firstMatch(calculationData);
@@ -186,6 +222,12 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
       // Populate calculation fields if available
       if (adjustmentType != null) {
         _calculationType = adjustmentType;
+        _calculationMethod = adjustmentType == 'appreciation'
+            ? 'compound_annual'
+            : 'reducing_balance';
+      }
+      if (methodStr != null && _availableMethods.contains(methodStr)) {
+        _calculationMethod = methodStr;
       }
       if (rateStr != null) {
         _rateController.text = rateStr;
@@ -486,9 +528,14 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         
         // If calculation was performed, include all calculation details
         if (_showNewPriceField && _calculationType != null && _rateController.text.isNotEmpty && _yearsController.text.isNotEmpty && _newPriceController.text.isNotEmpty) {
+          final methodLabel = _calculationMethodLabels[_calculationMethod] ??
+              (_calculationType == 'appreciation'
+                  ? _calculationMethodLabels['compound_annual']!
+                  : _calculationMethodLabels['reducing_balance']!);
           calculationInfo = '\n\n[VALUATION_CALCULATION]\n'
               'Base Value: LKR $baseValueStr\n'
               'Adjustment Type: ${_calculationType == 'appreciation' ? 'Appreciation' : 'Depreciation'}\n'
+              'Method: $methodLabel\n'
               'Rate: ${_rateController.text}%\n'
               'Years: ${_yearsController.text}\n'
               'Calculated Value: LKR ${_newPriceController.text}\n'
@@ -1662,6 +1709,30 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                   ),
                 ],
               ),
+              if (_calculationType != null) ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: _calculationMethod,
+                  decoration: const InputDecoration(
+                    labelText: 'Method',
+                    prefixIcon: Icon(Icons.functions),
+                  ),
+                  items: _availableMethods
+                      .map(
+                        (m) => DropdownMenuItem<String>(
+                          value: m,
+                          child: Text(_calculationMethodLabels[m] ?? m),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() {
+                      _calculationMethod = v;
+                    });
+                  },
+                ),
+              ],
               // Calculation Input Fields (shown when type is selected)
               if (_calculationType != null) ...[
                 const SizedBox(height: 16),
@@ -1717,6 +1788,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
       onTap: () {
         setState(() {
           _calculationType = value;
+          _calculationMethod =
+              value == 'appreciation' ? 'compound_annual' : 'reducing_balance';
           // Clear previous calculation inputs
           _rateController.clear();
           _yearsController.clear();
@@ -1797,24 +1870,46 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
       return;
     }
 
-    // Calculate new price using compound interest formula
-    // For appreciation: new_price = old_price * (1 + rate/100)^years
-    // For depreciation: new_price = old_price * (1 - rate/100)^years
+    final method = _calculationMethod ??
+        (_calculationType == 'appreciation'
+            ? 'compound_annual'
+            : 'reducing_balance');
+
+    // Calculate using selected valuation adjustment method.
     double newPrice;
     if (_calculationType == 'appreciation') {
-      newPrice = currentValue * (1 + rate / 100);
-      // Apply compound interest for remaining years
-      for (int i = 1; i < years; i++) {
-        newPrice = newPrice * (1 + rate / 100);
+      switch (method) {
+        case 'simple_interest':
+          newPrice = currentValue * (1 + (rate / 100) * years);
+          break;
+        case 'compound_monthly':
+          newPrice = currentValue * math.pow(1 + (rate / 1200), years * 12).toDouble();
+          break;
+        case 'compound_annual':
+        default:
+          newPrice = currentValue * math.pow(1 + (rate / 100), years).toDouble();
+          break;
       }
     } else {
-      // depreciation
-      newPrice = currentValue * (1 - rate / 100);
-      // Apply compound depreciation for remaining years
-      for (int i = 1; i < years; i++) {
-        newPrice = newPrice * (1 - rate / 100);
+      switch (method) {
+        case 'straight_line':
+          newPrice = currentValue * (1 - (rate / 100) * years);
+          break;
+        case 'double_declining':
+          final factor = (2 * (rate / 100)).clamp(0.0, 1.0);
+          newPrice = currentValue;
+          for (int i = 0; i < years; i++) {
+            newPrice = newPrice * (1 - factor);
+          }
+          break;
+        case 'reducing_balance':
+        default:
+          newPrice = currentValue * math.pow(1 - (rate / 100), years).toDouble();
+          break;
       }
     }
+
+    if (newPrice < 0) newPrice = 0;
 
     // Round to 2 decimal places
     newPrice = double.parse(newPrice.toStringAsFixed(2));
