@@ -3,9 +3,10 @@ import {
   Box, Card, CardContent, Typography, Button, Grid, TextField, MenuItem,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Dialog, DialogTitle, DialogContent, DialogActions, Alert, Tabs, Tab,
+  Chip, FormControlLabel, Checkbox, Tooltip, IconButton,
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
-import leaveService from '../../services/leaveService';
+import { Add, Cancel } from '@mui/icons-material';
+import axiosClient from '../../api/axiosClient';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
 import StatsCard from '../../components/StatsCard';
@@ -22,23 +23,37 @@ const LEAVE_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+const defaultForm = {
+  leave_type: 'annual',
+  start_date: '',
+  end_date: '',
+  reason: '',
+  is_half_day: false,
+  half_day_period: 'morning',
+};
+
 export default function MyLeaveRequests() {
   const [requests, setRequests] = useState([]);
+  const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [cancelDialog, setCancelDialog] = useState({ open: false, id: null });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [tab, setTab] = useState(0);
-  const [form, setForm] = useState({ leave_type: 'annual', start_date: '', end_date: '', reason: '' });
+  const [form, setForm] = useState(defaultForm);
   const [submitting, setSubmitting] = useState(false);
-
-  const TOTAL_LEAVE_DAYS = 45;
 
   const fetchData = async () => {
     try {
-      const reqRes = await leaveService.getMyRequests();
-      setRequests(Array.isArray(reqRes.data.data) ? reqRes.data.data : []);
-    } catch (err) {
+      const [reqRes, balRes] = await Promise.all([
+        axiosClient.get('/auth/leave-requests/my/'),
+        axiosClient.get('/auth/leave-balance/').catch(() => null),
+      ]);
+      const list = reqRes.data?.results ?? reqRes.data?.data ?? reqRes.data ?? [];
+      setRequests(Array.isArray(list) ? list : []);
+      if (balRes) setBalance(balRes.data);
+    } catch {
       setError('Failed to load data');
     } finally {
       setLoading(false);
@@ -51,10 +66,15 @@ export default function MyLeaveRequests() {
     setSubmitting(true);
     setError('');
     try {
-      await leaveService.createRequest(form);
+      const payload = { ...form };
+      if (payload.is_half_day) {
+        // For half-day, start_date == end_date
+        payload.end_date = payload.start_date;
+      }
+      await axiosClient.post('/auth/leave-requests/create/', payload);
       setSuccess('Leave request submitted!');
       setDialogOpen(false);
-      setForm({ leave_type: 'annual', start_date: '', end_date: '', reason: '' });
+      setForm(defaultForm);
       fetchData();
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.detail || 'Failed to submit');
@@ -63,18 +83,44 @@ export default function MyLeaveRequests() {
     }
   };
 
-  const filteredRequests = tab === 0 ? requests :
-    tab === 1 ? requests.filter(r => r.status === 'pending') :
-      tab === 2 ? requests.filter(r => r.status === 'approved') :
-        requests.filter(r => r.status === 'rejected');
+  const handleCancel = async () => {
+    const id = cancelDialog.id;
+    setCancelDialog({ open: false, id: null });
+    try {
+      await axiosClient.post(`/auth/leave-requests/${id}/cancel/`);
+      setSuccess('Leave request cancelled. HR has been notified.');
+      fetchData();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to cancel leave');
+    }
+  };
+
+  const canCancel = (r) => {
+    if (r.status !== 'approved') return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return new Date(r.start_date) > today;
+  };
+
+  const filteredRequests = tab === 0 ? requests
+    : tab === 1 ? requests.filter(r => r.status === 'pending')
+    : tab === 2 ? requests.filter(r => r.status === 'approved')
+    : requests.filter(r => ['rejected', 'cancelled_by_user'].includes(r.status));
 
   if (loading) return <LoadingSpinner />;
+
+  // Aggregate all leave types for summary display
+  const allBalances = balance?.balances ?? [];
+  const usedDays = allBalances.reduce((s, b) => s + (b.used ?? 0), 0);
+  const allocatedDays = allBalances.reduce((s, b) => s + (b.quota ?? 0), 45);
 
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>My Leave Requests</Typography>
-        <Button variant="outlined" color="primary" startIcon={<Add />} onClick={() => setDialogOpen(true)}>New Request</Button>
+        <Button variant="outlined" color="primary" startIcon={<Add />} onClick={() => setDialogOpen(true)}>
+          New Request
+        </Button>
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
@@ -82,45 +128,74 @@ export default function MyLeaveRequests() {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={4}>
-          <StatsCard title="Total Leave Days" value={TOTAL_LEAVE_DAYS} icon={EventNoteIcon} color="#1565C0" />
+          <StatsCard title="Allocated Days" value={allocatedDays} icon={EventNoteIcon} color="#1565C0" />
         </Grid>
         <Grid item xs={12} sm={4}>
-          <StatsCard title="Approved Leave Requests" value={requests.filter(r => r.status === 'approved').length} icon={CheckCircleIcon} color="#1565C0" />
+          <StatsCard title="Used Days" value={usedDays} icon={CheckCircleIcon} color={usedDays > allocatedDays ? '#d32f2f' : '#1565C0'} />
         </Grid>
         <Grid item xs={12} sm={4}>
-          <StatsCard title="Pending Leave Requests" value={requests.filter(r => r.status === 'pending').length} icon={PendingIcon} color="#1E88E5" />
+          <StatsCard title="Remaining Days" value={Math.max(0, allocatedDays - usedDays)} icon={PendingIcon} color="#1E88E5" />
         </Grid>
       </Grid>
+
+      {usedDays > allocatedDays && (() => {
+        const overdraft = allBalances.reduce((s, b) => s + (b.overdraft ?? 0), 0);
+        const displayOD = overdraft > 0 ? overdraft : (usedDays - allocatedDays);
+        return (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            You have exceeded your leave allocation by <strong>{displayOD.toFixed(1)} day(s)</strong>.
+            Excess leave days will be deducted from your monthly salary at the per-diem rate.
+          </Alert>
+        );
+      })()}
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         <Tab label="All" />
         <Tab label="Pending" />
         <Tab label="Approved" />
-        <Tab label="Rejected" />
+        <Tab label="Rejected / Cancelled" />
       </Tabs>
 
       <TableContainer component={Paper}>
-        <Table size="small" sx={{ tableLayout: 'fixed' }}>
+        <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell sx={{ width: '15%' }}>Type</TableCell>
-              <TableCell sx={{ width: '18%' }}>From</TableCell>
-              <TableCell sx={{ width: '18%' }}>To</TableCell>
-              <TableCell sx={{ width: '34%' }}>Reason</TableCell>
-              <TableCell sx={{ width: '15%' }}>Status</TableCell>
+              <TableCell>Type</TableCell>
+              <TableCell>From</TableCell>
+              <TableCell>To</TableCell>
+              <TableCell>Days</TableCell>
+              <TableCell>Reason</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filteredRequests.length === 0 ? (
-              <TableRow><TableCell colSpan={5} align="center">No leave requests found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} align="center">No leave requests found</TableCell></TableRow>
             ) : (
               filteredRequests.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell>{r.leave_type}</TableCell>
+                  <TableCell>
+                    {r.leave_type}
+                    {r.is_half_day && (
+                      <Chip label={`Half-day (${r.half_day_period})`} size="small" sx={{ ml: 0.5 }} />
+                    )}
+                  </TableCell>
                   <TableCell>{formatDate(r.start_date)}</TableCell>
                   <TableCell>{formatDate(r.end_date)}</TableCell>
-                  <TableCell sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reason}</TableCell>
+                  <TableCell>{r.days}</TableCell>
+                  <TableCell sx={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reason}</TableCell>
                   <TableCell><StatusChip status={r.status} /></TableCell>
+                  <TableCell>
+                    {canCancel(r) && (
+                      <Tooltip title="Cancel leave">
+                        <IconButton size="small" color="error"
+                          onClick={() => setCancelDialog({ open: true, id: r.id })}>
+                          <Cancel fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -139,14 +214,46 @@ export default function MyLeaveRequests() {
                 {LEAVE_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
               </TextField>
             </Grid>
-            <Grid item xs={6}>
-              <TextField fullWidth label="Start Date" type="date" value={form.start_date}
-                onChange={(e) => setForm({ ...form, start_date: e.target.value })} InputLabelProps={{ shrink: true }} required />
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={form.is_half_day}
+                    onChange={(e) => setForm({ ...form, is_half_day: e.target.checked })}
+                  />
+                }
+                label="Half-day leave"
+              />
             </Grid>
-            <Grid item xs={6}>
-              <TextField fullWidth label="End Date" type="date" value={form.end_date}
-                onChange={(e) => setForm({ ...form, end_date: e.target.value })} InputLabelProps={{ shrink: true }} required />
-            </Grid>
+            {form.is_half_day ? (
+              <>
+                <Grid item xs={6}>
+                  <TextField fullWidth label="Date" type="date" value={form.start_date}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value, end_date: e.target.value })}
+                    InputLabelProps={{ shrink: true }} required />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField select fullWidth label="Period" value={form.half_day_period}
+                    onChange={(e) => setForm({ ...form, half_day_period: e.target.value })}>
+                    <MenuItem value="morning">Morning</MenuItem>
+                    <MenuItem value="afternoon">Afternoon</MenuItem>
+                  </TextField>
+                </Grid>
+              </>
+            ) : (
+              <>
+                <Grid item xs={6}>
+                  <TextField fullWidth label="Start Date" type="date" value={form.start_date}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                    InputLabelProps={{ shrink: true }} required />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField fullWidth label="End Date" type="date" value={form.end_date}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                    InputLabelProps={{ shrink: true }} required />
+                </Grid>
+              </>
+            )}
             <Grid item xs={12}>
               <TextField fullWidth label="Reason" value={form.reason} multiline rows={3}
                 onChange={(e) => setForm({ ...form, reason: e.target.value })} required />
@@ -155,9 +262,21 @@ export default function MyLeaveRequests() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDialogOpen(false)} variant="outlined">Cancel</Button>
-          <Button onClick={handleSubmit} variant="outlined" color="primary" disabled={submitting}>
+          <Button onClick={handleSubmit} variant="contained" color="primary" disabled={submitting}>
             {submitting ? 'Submitting...' : 'Submit'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={cancelDialog.open} onClose={() => setCancelDialog({ open: false, id: null })}>
+        <DialogTitle>Cancel Leave</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to cancel this approved leave? HR will be notified.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelDialog({ open: false, id: null })}>No</Button>
+          <Button color="error" variant="contained" onClick={handleCancel}>Yes, Cancel</Button>
         </DialogActions>
       </Dialog>
     </Box>

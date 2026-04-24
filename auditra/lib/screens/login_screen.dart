@@ -45,24 +45,25 @@ class _LoginScreenState extends State<LoginScreen> {
       
       if (!mounted) return;
       
-      // Check if password change is required
-      final passwordChangeRequired = result['password_change_required'] ?? false;
-      
+      // Feature #4 fix: use password_change_required from login response
+      final passwordChangeRequired = result['password_change_required'] == true;
+
       if (passwordChangeRequired) {
-        // Show password change screen (optional)
-        await Navigator.of(context).push<bool>(
+        // Force password change — not optional for auto-created accounts
+        final changed = await Navigator.of(context).push<bool>(
           MaterialPageRoute(
             builder: (_) => ChangePasswordScreen(
-              isOptional: true,
-              onSuccess: () {
-                // Password changed successfully
-              },
+              isOptional: false,
+              onSuccess: () {},
             ),
           ),
         );
-        
-        // If user skipped or changed password, proceed to dashboard
         if (!mounted) return;
+        if (changed != true) {
+          // User dismissed — stay on login
+          setState(() { _isLoading = false; });
+          return;
+        }
       }
       
       Navigator.of(context).pushReplacement(

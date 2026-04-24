@@ -295,16 +295,31 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
     leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     days = serializers.ReadOnlyField()
+    can_cancel = serializers.SerializerMethodField()
     
     class Meta:
         model = LeaveRequest
         fields = (
             'id', 'user', 'employee_name', 'employee_id', 'employee_role', 'leave_type', 
-            'leave_type_display', 'start_date', 'end_date', 'days', 
+            'leave_type_display', 'start_date', 'end_date', 'days',
+            'is_half_day', 'half_day_period',
             'reason', 'status', 'status_display', 'submitted_at', 
-            'reviewed_at', 'reviewed_by', 'notes'
+            'reviewed_at', 'reviewed_by', 'notes',
+            'cancelled_at', 'cancelled_by', 'can_cancel',
         )
-        read_only_fields = ('user', 'status', 'submitted_at', 'reviewed_at', 'reviewed_by')
+        read_only_fields = (
+            'user', 'status', 'submitted_at', 'reviewed_at', 'reviewed_by',
+            'cancelled_at', 'cancelled_by',
+        )
+
+    def get_can_cancel(self, obj):
+        """Employee can cancel if approved and start_date is still in the future."""
+        from django.utils import timezone as _tz
+        if obj.status != 'approved':
+            return False
+        if obj.cancelled_at is not None:
+            return False
+        return obj.start_date > _tz.now().date()
     
     def get_employee_name(self, obj):
         """Get employee full name"""

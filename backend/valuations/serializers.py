@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Valuation, ValuationPhoto, Notification, ValuationHistory
+from .models import Valuation, ValuationPhoto, ValuationHistory
 
 
 class ValuationPhotoSerializer(serializers.ModelSerializer):
@@ -9,7 +9,10 @@ class ValuationPhotoSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = ValuationPhoto
-        fields = ['id', 'photo', 'photo_url', 'caption', 'uploaded_at']
+        fields = [
+            'id', 'photo', 'photo_url', 'caption', 'uploaded_at',
+            'is_primary', 'ordering', 'captured_at', 'gps_lat', 'gps_lon', 'device_id',
+        ]
         read_only_fields = ['uploaded_at']
     
     def get_photo_url(self, obj):
@@ -149,18 +152,11 @@ class ValuationPhotoCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = ValuationPhoto
-        fields = ['valuation', 'photo', 'caption']
+        fields = [
+            'valuation', 'photo', 'caption',
+            'is_primary', 'ordering', 'captured_at', 'gps_lat', 'gps_lon', 'device_id',
+        ]
 
-
-class NotificationSerializer(serializers.ModelSerializer):
-    """Serializer for notifications"""
-
-    class Meta:
-        model = Notification
-        fields = ['id', 'title', 'message', 'notification_type', 'is_read',
-                  'valuation', 'project', 'created_at']
-        read_only_fields = ['id', 'title', 'message', 'notification_type',
-                            'valuation', 'project', 'created_at']
 
 
 class ValuationHistorySerializer(serializers.ModelSerializer):

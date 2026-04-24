@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../models/project_model.dart';
 import '../../../../theme/app_colors.dart';
 import '../../../../widgets/shared_dashboard_widgets.dart';
+import '../../visit_scheduling_screen.dart';
 import '../utils/field_officer_document_manager.dart';
 
 class ProjectDetailsScreen extends StatefulWidget {
@@ -232,6 +233,40 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                       color: Colors.blue,
                     )),
                   ]),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => VisitSchedulingScreen(
+                              projectId: project.id,
+                              projectTitle: project.title,
+                              appBarTitle:
+                                  'Valuation schedule – ${project.title}',
+                              fabLabel: 'Set valuation date',
+                              emptyStateText:
+                                  'No valuation date scheduled. Tap the button to choose when you will visit the site.',
+                              confirmDialogTitle: 'Confirm valuation date',
+                              confirmDialogScheduleLabel: 'Set date',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.event_available_outlined,
+                          color: AppColors.primary),
+                      label: const Text('Schedule valuation (site visit)'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0D47A1),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: Color(0xFF0D47A1)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
 
                   // Documents Section
                   if (project.documents.isNotEmpty) ...[

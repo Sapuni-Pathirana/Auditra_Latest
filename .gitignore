@@ -26,6 +26,10 @@ tmpclaude-*
 *.env
 !.env.example
 
+# Google / Firebase service account keys (never commit)
+**/firebase-adminsdk*.json
+**/*-firebase-adminsdk-*.json
+
 # -----------------------------
 # Flutter / Dart
 # -----------------------------

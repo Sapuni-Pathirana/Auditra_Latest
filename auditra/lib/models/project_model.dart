@@ -36,6 +36,8 @@ class Project {
   final String? workflowStage;
   final DateTime? startDate;
   final DateTime? endDate;
+  /// Earliest upcoming scheduled site visit (valuation) from API (`next_scheduled_visit`, ISO date).
+  final String? nextScheduledVisit;
   final List<ProjectDocument> documents;
   final int documentsCount;
   final List<Valuation> valuations;
@@ -84,6 +86,7 @@ class Project {
     this.workflowStage,
     this.startDate,
     this.endDate,
+    this.nextScheduledVisit,
     required this.documents,
     required this.documentsCount,
     required this.valuations,
@@ -167,6 +170,7 @@ class Project {
       workflowStage: json['workflow_stage'],
       startDate: json['start_date'] != null ? DateTime.parse(json['start_date']) : null,
       endDate: json['end_date'] != null ? DateTime.parse(json['end_date']) : null,
+      nextScheduledVisit: json['next_scheduled_visit'] as String?,
       documents: (json['documents'] as List<dynamic>?)
           ?.map((doc) {
             try {
@@ -233,6 +237,7 @@ class Project {
       'workflow_stage': workflowStage,
       'start_date': startDate?.toIso8601String(),
       'end_date': endDate?.toIso8601String(),
+      'next_scheduled_visit': nextScheduledVisit,
       'documents': documents.map((doc) => doc.toJson()).toList(),
       'documents_count': documentsCount,
       'valuations': valuations.map((val) => _valuationToJson(val)).toList(),

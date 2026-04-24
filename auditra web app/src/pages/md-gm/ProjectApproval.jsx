@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import { Search, CheckCircle, Cancel, Visibility } from '@mui/icons-material';
 import projectService from '../../services/projectService';
-import { formatDate, getStatusColor, capitalize } from '../../utils/helpers';
+import { formatDate, getStatusColor, capitalize, getPriorityColor, getPriorityBgColor } from '../../utils/helpers';
 
 const STATUS_TAB_MAP = { pending: 1, approved: 2, rejected: 3 };
 
@@ -115,8 +115,13 @@ export default function ProjectApproval() {
                   <TableCell>{project.client_name || project.client_info?.name || 'N/A'}</TableCell>
                   <TableCell>
                     <Chip label={capitalize(project.priority) || 'Normal'} size="small"
-                      color={project.priority === 'high' ? 'primary' : project.priority === 'medium' ? 'warning' : 'default'}
-                      sx={{ width: 110, justifyContent: 'center' }} />
+                      sx={{
+                        width: 110,
+                        justifyContent: 'center',
+                        bgcolor: getPriorityBgColor(project.priority),
+                        color: getPriorityColor(project.priority),
+                        fontWeight: 600,
+                      }} />
                   </TableCell>
                   <TableCell>{formatDate(project.start_date)}</TableCell>
                   <TableCell>{formatDate(project.end_date || project.due_date)}</TableCell>

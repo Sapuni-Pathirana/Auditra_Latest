@@ -5,12 +5,12 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 import logging
-from .models import Valuation, ValuationPhoto, Notification, ValuationHistory
+from .models import Valuation, ValuationPhoto, ValuationHistory
 from .serializers import (
     ValuationSerializer, ValuationCreateSerializer,
     ValuationPhotoSerializer, ValuationPhotoCreateSerializer,
-    NotificationSerializer
 )
+from notifications.services import notify as send_notification
 from projects.models import Project, ProjectStatusHistory
 
 logger = logging.getLogger(__name__)
@@ -171,6 +171,27 @@ def submit_valuation(request, pk):
     except Exception:
         pass
 
+    # Feature #3 (C1): notify the accessor / next reviewer.
+    try:
+        from notifications.services import notify
+        project = valuation.project
+        title = f'Valuation submitted — {project.title}'
+        msg = (
+            f'{request.user.get_full_name() or request.user.username} submitted a '
+            f'{valuation.get_category_display()} valuation for review.'
+        )
+        meta = {'valuation_id': valuation.id, 'project_id': project.id}
+        next_reviewer = project.assigned_accessor or project.assigned_senior_valuer
+        if next_reviewer:
+            notify(
+                user=next_reviewer, category='valuation', severity='info',
+                title=title, message=msg, meta=meta,
+                action_url=f'/dashboard/projects/{project.id}',
+                email_subject=title,
+            )
+    except Exception:
+        pass
+
     serializer = ValuationSerializer(valuation, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -317,6 +338,32 @@ def accept_valuation(request, pk):
     except Exception:
         pass
 
+    # Feature #3 (C1): notify the senior valuer and the field officer.
+    try:
+        from notifications.services import notify
+        sv = valuation.project.assigned_senior_valuer
+        fo = valuation.field_officer
+        meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
+        if sv:
+            notify(
+                user=sv, category='valuation', severity='info',
+                title=f'Valuation ready for final review — {valuation.project.title}',
+                message=f'Accessor accepted a {valuation.get_category_display()} valuation.',
+                meta=meta,
+                action_url=f'/dashboard/projects/{valuation.project.id}',
+                email_subject='Valuation ready for your review',
+            )
+        if fo:
+            notify(
+                user=fo, category='valuation', severity='success',
+                title=f'Valuation accepted — {valuation.project.title}',
+                message='Your valuation has been accepted by the accessor and forwarded to the senior valuer.',
+                meta=meta,
+                action_url=f'/dashboard/projects/{valuation.project.id}',
+            )
+    except Exception:
+        pass
+
     serializer = ValuationSerializer(valuation, context={'request': request})
     return Response({
         **serializer.data,
@@ -382,15 +429,16 @@ def reject_valuation(request, pk):
         comments=rejection_reason,
     )
 
-    # Create notification for field officer
+    # Notify field officer
     accessor_name = request.user.get_full_name() or request.user.username
-    Notification.objects.create(
+    send_notification(
         user=valuation.field_officer,
+        category='valuation',
+        severity='error',
         title='Valuation Rejected by Assessor',
         message=f'Your {valuation.get_category_display()} valuation for project "{valuation.project.title}" has been rejected by Assessor ({accessor_name}). Reason: {rejection_reason}',
-        notification_type='rejection',
-        valuation=valuation,
-        project=valuation.project,
+        meta={'valuation_id': valuation.id, 'project_id': valuation.project.id},
+        action_url=f'/dashboard/projects/{valuation.project.id}',
     )
 
     try:
@@ -552,6 +600,31 @@ def senior_valuer_approve_valuation(request, pk):
     except Exception:
         pass
 
+    # Feature #3 (C1): notify the field officer + MD/GM users.
+    try:
+        from notifications.services import notify
+        meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
+        if valuation.field_officer:
+            notify(
+                user=valuation.field_officer, category='valuation', severity='success',
+                title=f'Valuation approved — {valuation.project.title}',
+                message='Your valuation has been approved by the senior valuer and sent to MD/GM.',
+                meta=meta,
+                action_url=f'/dashboard/projects/{valuation.project.id}',
+            )
+        from django.contrib.auth.models import User
+        for md in User.objects.filter(role__role='md_gm', is_active=True):
+            notify(
+                user=md, category='valuation', severity='info',
+                title=f'Valuation awaiting MD/GM approval — {valuation.project.title}',
+                message='A senior-valuer-approved valuation is ready for final approval.',
+                meta=meta,
+                action_url=f'/dashboard/projects/{valuation.project.id}',
+                email_subject='Valuation awaiting MD/GM approval',
+            )
+    except Exception:
+        pass
+
     serializer = ValuationSerializer(valuation, context={'request': request})
     return Response({
         **serializer.data,
@@ -617,29 +690,25 @@ def senior_valuer_reject_valuation(request, pk):
         comments=rejection_reason,
     )
 
-    # Create notifications for assessor and field officer
+    # Notify assessor and field officer
     sv_name = request.user.get_full_name() or request.user.username
     notification_msg = f'{valuation.get_category_display()} valuation for project "{valuation.project.title}" has been rejected by Senior Valuer ({sv_name}). Reason: {rejection_reason}'
+    meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
+    action_url = f'/dashboard/projects/{valuation.project.id}'
 
-    # Notify assessor
     if valuation.project.assigned_accessor:
-        Notification.objects.create(
+        send_notification(
             user=valuation.project.assigned_accessor,
+            category='valuation', severity='warning',
             title='Valuation Rejected by Senior Valuer',
-            message=notification_msg,
-            notification_type='rejection',
-            valuation=valuation,
-            project=valuation.project,
+            message=notification_msg, meta=meta, action_url=action_url,
         )
 
-    # Notify field officer
-    Notification.objects.create(
+    send_notification(
         user=valuation.field_officer,
+        category='valuation', severity='error',
         title='Valuation Rejected by Senior Valuer',
-        message=notification_msg,
-        notification_type='rejection',
-        valuation=valuation,
-        project=valuation.project,
+        message=notification_msg, meta=meta, action_url=action_url,
     )
 
     try:
@@ -795,29 +864,25 @@ def md_gm_reject_valuation(request, pk):
         comments=rejection_reason,
     )
 
-    # Create notifications for senior valuer and field officer
+    # Notify senior valuer and field officer
     mdgm_name = request.user.get_full_name() or request.user.username
     notification_msg = f'{valuation.get_category_display()} valuation for project "{valuation.project.title}" has been rejected by MD/GM ({mdgm_name}). Reason: {rejection_reason}'
+    meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
+    action_url = f'/dashboard/projects/{valuation.project.id}'
 
-    # Notify senior valuer
     if valuation.project.assigned_senior_valuer:
-        Notification.objects.create(
+        send_notification(
             user=valuation.project.assigned_senior_valuer,
+            category='valuation', severity='warning',
             title='Valuation Rejected by MD/GM',
-            message=notification_msg,
-            notification_type='rejection',
-            valuation=valuation,
-            project=valuation.project,
+            message=notification_msg, meta=meta, action_url=action_url,
         )
 
-    # Notify field officer
-    Notification.objects.create(
+    send_notification(
         user=valuation.field_officer,
+        category='valuation', severity='error',
         title='Valuation Rejected by MD/GM',
-        message=notification_msg,
-        notification_type='rejection',
-        valuation=valuation,
-        project=valuation.project,
+        message=notification_msg, meta=meta, action_url=action_url,
     )
 
     try:
@@ -837,40 +902,34 @@ def md_gm_reject_valuation(request, pk):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+
 # ============================================================================
-# Notification Views
+# Photo reorder + primary photo (Feature #9)
 # ============================================================================
 
-class NotificationListView(generics.ListAPIView):
-    """List notifications for the current user"""
-    permission_classes = [IsAuthenticated]
-    serializer_class = NotificationSerializer
-
-    def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by('-created_at')[:50]
-
-
-@api_view(['GET'])
+@api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
-def unread_notification_count(request):
-    """Get count of unread notifications"""
-    count = Notification.objects.filter(user=request.user, is_read=False).count()
-    return Response({'count': count})
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def mark_notification_read(request, pk):
-    """Mark a single notification as read"""
-    notification = get_object_or_404(Notification, pk=pk, user=request.user)
-    notification.is_read = True
-    notification.save(update_fields=['is_read'])
+@transaction.atomic
+def reorder_valuation_photos(request, valuation_id):
+    """Accept an ordered list of photo IDs and update ordering field."""
+    valuation = get_object_or_404(Valuation, pk=valuation_id)
+    ordered_ids = request.data.get('photo_ids', [])
+    if not isinstance(ordered_ids, list):
+        return Response({'error': 'photo_ids must be a list'}, status=400)
+    for idx, photo_id in enumerate(ordered_ids):
+        ValuationPhoto.objects.filter(pk=photo_id, valuation=valuation).update(ordering=idx)
     return Response({'status': 'ok'})
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def mark_all_notifications_read(request):
-    """Mark all notifications as read for the current user"""
-    Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+@transaction.atomic
+def set_primary_photo(request, valuation_id, photo_id):
+    """Set one photo as primary (clears all others for this valuation first)."""
+    valuation = get_object_or_404(Valuation, pk=valuation_id)
+    ValuationPhoto.objects.filter(valuation=valuation).update(is_primary=False)
+    updated = ValuationPhoto.objects.filter(pk=photo_id, valuation=valuation).update(is_primary=True)
+    if not updated:
+        return Response({'error': 'Photo not found'}, status=404)
     return Response({'status': 'ok'})
+

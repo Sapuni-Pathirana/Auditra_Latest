@@ -97,6 +97,8 @@ class ProjectDocumentSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.SerializerMethodField()
     file_url = serializers.SerializerMethodField()
     file_size = serializers.SerializerMethodField()
+    visible_to_ids = serializers.SerializerMethodField()
+    visible_to_names = serializers.SerializerMethodField()
     
     class Meta:
         model = ProjectDocument
@@ -104,9 +106,19 @@ class ProjectDocumentSerializer(serializers.ModelSerializer):
             'id', 'project', 'file', 'file_url', 'file_size',
             'name', 'description', 'uploaded_by', 'uploaded_by_username',
             'assigned_to', 'assigned_to_username', 'assigned_to_name',
+            'visible_to_ids', 'visible_to_names',
             'uploaded_at'
         )
         read_only_fields = ('uploaded_by', 'uploaded_at')
+
+    def get_visible_to_ids(self, obj):
+        return list(obj.visible_to.values_list('id', flat=True))
+
+    def get_visible_to_names(self, obj):
+        return [
+            {'id': u.id, 'name': u.get_full_name() or u.username}
+            for u in obj.visible_to.all()
+        ]
     
     def get_assigned_to_name(self, obj):
         if obj.assigned_to:
@@ -191,10 +203,13 @@ class ProjectSerializer(serializers.ModelSerializer):
         allow_null=True
     )
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    documents = ProjectDocumentSerializer(many=True, read_only=True)
-    documents_count = serializers.IntegerField(source='documents.count', read_only=True)
+    documents = serializers.SerializerMethodField()
+    documents_count = serializers.SerializerMethodField()
     valuations = serializers.SerializerMethodField()
     valuations_count = serializers.SerializerMethodField()
+    items_count = serializers.SerializerMethodField()
+    items_total_value = serializers.SerializerMethodField()
+    next_scheduled_visit = serializers.SerializerMethodField()
     history = ProjectStatusHistorySerializer(many=True, read_only=True)
     payment = ProjectPaymentSerializer(read_only=True)
     admin_approved_by_name = serializers.SerializerMethodField()
@@ -212,7 +227,9 @@ class ProjectSerializer(serializers.ModelSerializer):
             'assigned_senior_valuer', 'assigned_senior_valuer_username', 'assigned_senior_valuer_name',
             'assigned_senior_valuer_email', 'has_agent', 'client_info', 'agent_info',
             'status', 'status_display', 'priority', 'start_date', 'end_date', 'estimated_value',
-            'documents', 'documents_count', 'valuations', 'valuations_count', 'history', 'payment',
+            'next_scheduled_visit',
+            'documents', 'documents_count', 'valuations', 'valuations_count',
+            'items_count', 'items_total_value', 'history', 'payment',
             'admin_approval_status', 'admin_rejection_reason', 'admin_approved_by',
             'admin_approved_by_name', 'admin_approved_at', 'admin_rejected_at',
             'created_at', 'updated_at'
@@ -270,6 +287,66 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_valuations_count(self, obj):
         """Get count of valuations for this project"""
         return obj.valuations.count()
+
+    def _visible_documents_qs(self, obj):
+        """Return documents filtered by per-user visibility (Feature #11)."""
+        request = self.context.get('request')
+        qs = obj.documents.all()
+        if not request or not request.user.is_authenticated:
+            return qs
+        user = request.user
+        try:
+            role = user.role.role if hasattr(user, 'role') else None
+        except Exception:
+            role = None
+        # Coordinator (owner), admin, md_gm see everything; superusers too
+        if role in ('coordinator', 'admin', 'md_gm') or user.is_staff or user.is_superuser:
+            return qs
+        # Everyone else: see docs where visible_to is empty OR they are uploader OR they are in visible_to OR assigned_to
+        from django.db.models import Q, Count
+        qs = qs.annotate(_vcount=Count('visible_to'))
+        return qs.filter(
+            Q(_vcount=0) |
+            Q(uploaded_by=user) |
+            Q(assigned_to=user) |
+            Q(visible_to=user)
+        ).distinct()
+
+    def get_documents(self, obj):
+        qs = self._visible_documents_qs(obj)
+        return ProjectDocumentSerializer(qs, many=True, context=self.context).data
+
+    def get_documents_count(self, obj):
+        return self._visible_documents_qs(obj).count()
+
+    def get_items_count(self, obj):
+        try:
+            return obj.report_items.count()
+        except Exception:
+            return 0
+
+    def get_items_total_value(self, obj):
+        try:
+            from django.db.models import Sum, F
+            agg = obj.report_items.aggregate(
+                total=Sum(F('unit_value') * F('quantity'))
+            )
+            return float(agg['total'] or 0)
+        except Exception:
+            return 0
+
+    def get_next_scheduled_visit(self, obj):
+        """Earliest future or today ProjectVisit in scheduled/rescheduled status (ISO date or None)."""
+        from django.utils import timezone
+        today = timezone.now().date()
+        candidates = [
+            v for v in obj.visits.all()
+            if v.status in ('scheduled', 'rescheduled') and v.scheduled_date >= today
+        ]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda v: v.scheduled_date)
+        return candidates[0].scheduled_date.isoformat()
 
     def get_admin_approved_by_name(self, obj):
         if obj.admin_approved_by:

@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'network_service.dart';
 import 'offline_storage_service.dart';
@@ -62,6 +66,15 @@ class SyncEngine {
       }
     }
 
+    // Feature #4/14 (C2): periodic background sync every 5 minutes. Each
+    // `syncAll` call is cheap when there's nothing to sync.
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (NetworkService.isOnline) {
+        syncAll(silent: true);
+      }
+    });
+
     _isInitialized = true;
     print('✅ Sync engine initialized');
   }
@@ -87,6 +100,17 @@ class SyncEngine {
     }
   }
 
+  /// Human-readable sync status label from int code
+  static String syncStatusLabel(int code) {
+    switch (code) {
+      case 0: return 'Queued';
+      case 1: return 'Synced';
+      case 2: return 'Syncing';
+      case 3: return 'Failed';
+      default: return 'Unknown';
+    }
+  }
+
   /// Sync all pending items
   static Future<void> syncAll({bool silent = false}) async {
     if (_isSyncing) {
@@ -103,10 +127,10 @@ class SyncEngine {
     final unsyncedValuations = OfflineStorageService.getUnsyncedValuations();
     final unsyncedAttendance = OfflineStorageService.getUnsyncedAttendance();
     final unsyncedPhotos = OfflineStorageService.getUnsyncedPhotos();
-    final hasUnsyncedItems = unsyncedValuations.isNotEmpty || 
-                            unsyncedAttendance.isNotEmpty || 
+    final hasUnsyncedItems = unsyncedValuations.isNotEmpty ||
+                            unsyncedAttendance.isNotEmpty ||
                             unsyncedPhotos.isNotEmpty;
-    
+
     if (!hasUnsyncedItems) {
       if (!silent) print('✅ No unsynced items - skipping sync');
       return;
@@ -158,7 +182,7 @@ class SyncEngine {
   /// Sync a single valuation
   static Future<Map<String, dynamic>> syncValuation(String localId) async {
     final valuation = OfflineStorageService.getValuationByLocalId(localId);
-    
+
     if (valuation == null) {
       return {'success': false, 'message': 'Valuation not found'};
     }
@@ -167,8 +191,11 @@ class SyncEngine {
       return {'success': true, 'message': 'Already synced'};
     }
 
+    // Mark as Syncing (2)
+    await OfflineStorageService.updateValuationSyncStatus(localId, 2);
+    _notifyListeners('itemStatusChanged', {'localId': localId, 'status': 'Syncing'});
+
     try {
-      // Prepare data for API (remove offline metadata)
       final apiData = Map<String, dynamic>.from(valuation);
       apiData.remove('localId');
       apiData.remove('syncStatus');
@@ -176,35 +203,46 @@ class SyncEngine {
       apiData.remove('createdAt');
       apiData.remove('updatedAt');
       apiData.remove('syncedAt');
-      
-      // Debug: Log the data being synced
-      print('🔄 Syncing valuation $localId with data: ${apiData.keys.toList()}');
+      apiData.remove('retryCount');
+      apiData.remove('nextRetryAt');
 
-      // Use syncValuationToServer directly to avoid creating duplicate offline entries
       final result = await ApiService.syncValuationToServer(apiData);
-      
-      // Debug: Log the result
-      print('🔄 Sync result for $localId: success=${result['success']}, message=${result['message']}');
 
       if (result['success'] == true) {
-        // Check if data exists and has an id
         final data = result['data'];
         if (data != null && data is Map<String, dynamic> && data['id'] != null) {
           final serverId = data['id'] as int;
           await OfflineStorageService.markValuationSynced(localId, serverId);
-          print('✅ Valuation synced: $localId -> $serverId');
+          _notifyListeners('itemStatusChanged', {'localId': localId, 'status': 'Synced'});
           return {'success': true, 'serverId': serverId};
         } else {
-          print('❌ Sync response missing data or id: $result');
+          await OfflineStorageService.updateValuationSyncStatus(localId, 3); // Failed
+          _notifyListeners('itemStatusChanged', {'localId': localId, 'status': 'Failed'});
           return {'success': false, 'message': 'Server response missing valuation ID'};
         }
       } else {
-        final errorMessage = result['message'] ?? 'Unknown error';
-        print('❌ Failed to sync valuation: $errorMessage');
-        return {'success': false, 'message': errorMessage};
+        // Feature #4/14 (C2): basic conflict resolution on 409.
+        final msg = (result['message'] ?? '').toString();
+        if (msg.contains('409') || msg.toLowerCase().contains('conflict')) {
+          final existingId = result['existing_id'];
+          if (existingId is int) {
+            await OfflineStorageService.markValuationSynced(localId, existingId);
+            _notifyListeners('itemStatusChanged', {'localId': localId, 'status': 'Synced'});
+            _notifyListeners('conflictResolved', {
+              'localId': localId,
+              'serverId': existingId,
+              'strategy': 'last-write-wins',
+            });
+            return {'success': true, 'serverId': existingId, 'conflict': true};
+          }
+        }
+        await OfflineStorageService.updateValuationSyncStatus(localId, 3); // Failed
+        _notifyListeners('itemStatusChanged', {'localId': localId, 'status': 'Failed'});
+        return {'success': false, 'message': msg.isEmpty ? 'Unknown error' : msg};
       }
     } catch (e) {
-      print('❌ Error syncing valuation: $e');
+      await OfflineStorageService.updateValuationSyncStatus(localId, 3); // Failed
+      _notifyListeners('itemStatusChanged', {'localId': localId, 'status': 'Failed'});
       return {'success': false, 'message': e.toString()};
     }
   }
@@ -248,10 +286,10 @@ class SyncEngine {
     return {'synced': synced, 'failed': failed};
   }
 
-  /// Sync all unsynced attendance records
+  /// Sync all unsynced attendance records (Feature #4/14 — C2).
   static Future<Map<String, dynamic>> _syncAttendance({bool silent = false}) async {
     final unsynced = OfflineStorageService.getUnsyncedAttendance();
-    
+
     if (!silent && unsynced.isNotEmpty) {
       print('📤 Syncing ${unsynced.length} attendance records...');
     }
@@ -259,16 +297,65 @@ class SyncEngine {
     int synced = 0;
     int failed = 0;
 
-    // TODO: Implement attendance sync when API is available
-    // For now, just mark as synced if we have the API endpoint
-    
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    if (token == null) return {'synced': 0, 'failed': unsynced.length};
+
+    for (final record in unsynced) {
+      final localId = record['localId'] as String?;
+      if (localId == null) continue;
+
+      // Supported actions: check_in (default), check_out, overtime_start, overtime_end.
+      final action = (record['action'] as String?) ?? 'check_in';
+      final endpoint = switch (action) {
+        'check_out' => '/attendance/checkout/',
+        'overtime_start' => '/attendance/overtime/start/',
+        'overtime_end' => '/attendance/overtime/end/',
+        _ => '/attendance/mark/',
+      };
+
+      try {
+        final resp = await http.post(
+          Uri.parse('${ApiService.baseUrl}$endpoint'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            if (record['latitude'] != null) 'latitude': record['latitude'],
+            if (record['longitude'] != null) 'longitude': record['longitude'],
+            if (record['note'] != null) 'note': record['note'],
+          }),
+        );
+        if (resp.statusCode >= 200 && resp.statusCode < 300) {
+          int serverId = 0;
+          try {
+            final body = jsonDecode(resp.body);
+            if (body is Map && body['id'] is int) serverId = body['id'] as int;
+          } catch (_) {}
+          await OfflineStorageService.markAttendanceSynced(localId, serverId);
+          synced++;
+        } else if (resp.statusCode == 409) {
+          // Conflict — server already has today's record; treat as success.
+          await OfflineStorageService.markAttendanceSynced(localId, 0);
+          synced++;
+        } else {
+          await OfflineStorageService.markAttendanceFailed(localId);
+          failed++;
+        }
+      } catch (_) {
+        await OfflineStorageService.markAttendanceFailed(localId);
+        failed++;
+      }
+    }
+
     return {'synced': synced, 'failed': failed};
   }
 
-  /// Sync all unsynced photos
+  /// Sync all unsynced photos (Feature #4/14 — C2).
   static Future<Map<String, dynamic>> _syncPhotos({bool silent = false}) async {
     final unsynced = OfflineStorageService.getUnsyncedPhotos();
-    
+
     if (!silent && unsynced.isNotEmpty) {
       print('📤 Syncing ${unsynced.length} photos...');
     }
@@ -276,9 +363,63 @@ class SyncEngine {
     int synced = 0;
     int failed = 0;
 
-    // TODO: Implement photo sync when API is available
-    // Need to upload photo file and link to valuation
-    
+    for (final photo in unsynced) {
+      final photoId = photo['id'] as String?;
+      final filePath = photo['filePath'] as String?;
+      final valuationLocalId = photo['valuationLocalId'] as String?;
+      if (photoId == null || filePath == null) {
+        failed++;
+        continue;
+      }
+
+      // Resolve valuation server id — we can only upload photos for a
+      // valuation that has already been synced to the server.
+      int? valuationServerId;
+      if (valuationLocalId != null) {
+        final v = OfflineStorageService.getValuationByLocalId(valuationLocalId);
+        if (v != null && v['serverId'] is int) {
+          valuationServerId = v['serverId'] as int;
+        }
+      }
+      if (valuationServerId == null) {
+        // Valuation not yet uploaded — leave photo queued for next pass.
+        continue;
+      }
+
+      final file = File(filePath);
+      if (!await file.exists()) {
+        await OfflineStorageService.markPhotoFailed(photoId);
+        failed++;
+        continue;
+      }
+
+      try {
+        final result = await ApiService.uploadValuationPhoto(
+          valuationServerId,
+          filePath,
+          caption: photo['caption'] as String?,
+          isPrimary: photo['isPrimary'] == true,
+          ordering: photo['ordering'] as int?,
+          capturedAt: photo['capturedAt'] as String?,
+          gpsLat: (photo['gpsLat'] as num?)?.toDouble(),
+          gpsLon: (photo['gpsLon'] as num?)?.toDouble(),
+          deviceId: photo['deviceId'] as String?,
+        );
+        if (result['success'] == true) {
+          final data = result['data'];
+          final serverId = (data is Map && data['id'] is int) ? data['id'] as int : 0;
+          await OfflineStorageService.markPhotoSynced(photoId, serverId);
+          synced++;
+        } else {
+          await OfflineStorageService.markPhotoFailed(photoId);
+          failed++;
+        }
+      } catch (_) {
+        await OfflineStorageService.markPhotoFailed(photoId);
+        failed++;
+      }
+    }
+
     return {'synced': synced, 'failed': failed};
   }
 

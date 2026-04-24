@@ -22,6 +22,8 @@ import ClientSubmissions from './pages/admin/ClientSubmissions';
 import EmployeeSubmissions from './pages/admin/EmployeeSubmissions';
 import CancellationRequests from './pages/admin/CancellationRequests';
 import DirectProjectApprovals from './pages/admin/DirectProjectApprovals';
+import InvitationTracking from './pages/admin/InvitationTracking';
+import AllProjectItems from './pages/admin/AllProjectItems';
 
 // Coordinator pages
 import CoordinatorDashboard from './pages/coordinator/CoordinatorDashboard';
@@ -58,6 +60,10 @@ import MyPaymentSlips from './pages/shared/MyPaymentSlips';
 import PersonalInfo from './pages/shared/PersonalInfo';
 import ChangePassword from './pages/shared/ChangePassword';
 import ForceChangePassword from './pages/auth/ForceChangePassword';
+import Profile from './pages/shared/Profile';
+import NotificationsPage from './pages/shared/NotificationsPage';
+import ProjectStandups from './pages/shared/ProjectStandups';
+import ProjectStandupsPage from './pages/shared/ProjectStandupsPage';
 import MyProjects from './pages/shared/MyProjects';
 
 // Field Officer
@@ -159,6 +165,7 @@ export default function App() {
         <Route path="projects/create" element={<ProtectedRoute allowedRoles={['coordinator']}><CreateProject /></ProtectedRoute>} />
         <Route path="projects/:id/edit" element={<ProtectedRoute allowedRoles={['coordinator']}><EditProject /></ProtectedRoute>} />
         <Route path="projects/:id" element={<ProjectDetail />} />
+        <Route path="projects/:projectId/standups" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'field_officer', 'accessor', 'senior_valuer', 'md_gm']}><ProjectStandupsPage /></ProtectedRoute>} />
 
         {/* Accessor routes */}
         <Route path="my-projects" element={<AccessorProjects />} />
@@ -178,11 +185,17 @@ export default function App() {
         <Route path="agent-payments" element={<ProtectedRoute allowedRoles={['agent']}><AgentPayments /></ProtectedRoute>} />
         <Route path="agent-commission-reports" element={<ProtectedRoute allowedRoles={['agent']}><AgentCommissionReports /></ProtectedRoute>} />
 
+        {/* Admin new routes */}
+        <Route path="invitations" element={<ProtectedRoute allowedRoles={['admin']}><InvitationTracking /></ProtectedRoute>} />
+        <Route path="all-project-items" element={<ProtectedRoute allowedRoles={['admin', 'md_gm']}><AllProjectItems /></ProtectedRoute>} />
+
         {/* Shared routes - accessible by all authenticated users */}
         <Route path="my-attendance" element={<MyAttendance />} />
         <Route path="my-leave" element={<MyLeaveRequests />} />
         <Route path="my-payments" element={<MyPaymentSlips />} />
-        <Route path="profile" element={<PersonalInfo />} />
+        <Route path="personal-info" element={<PersonalInfo />} />
+        <Route path="profile" element={<Profile />} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="change-password" element={<ChangePassword />} />
         <Route path="force-change-password" element={<ForceChangePassword />} />
       </Route>

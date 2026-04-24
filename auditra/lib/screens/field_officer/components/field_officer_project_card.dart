@@ -9,6 +9,7 @@ class FieldOfficerProjectCard extends StatelessWidget {
   final Function(Project) onViewReports;
   final Function(Project) onCreateReport;
   final Function(Project) onSubmit;
+  final void Function(Project)? onScheduleVisit;
 
   const FieldOfficerProjectCard({
     super.key,
@@ -17,7 +18,17 @@ class FieldOfficerProjectCard extends StatelessWidget {
     required this.onViewReports,
     required this.onCreateReport,
     required this.onSubmit,
+    this.onScheduleVisit,
   });
+
+  static String _formatNextVisitLine(String? iso) {
+    if (iso == null || iso.isEmpty) return 'Not set';
+    try {
+      return DateFormat('MMM d').format(DateTime.parse(iso));
+    } catch (_) {
+      return iso;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -144,15 +155,28 @@ class FieldOfficerProjectCard extends StatelessWidget {
                       ),
                       Container(width: 1, height: 24, color: Colors.grey[300]),
                       const SizedBox(width: 12),
-                      Row(
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Icon(Icons.calendar_today_rounded, size: 14, color: Colors.grey[500]),
-                          const SizedBox(width: 4),
                           Text(
-                            project.startDate != null 
-                              ? DateFormat('MMM dd').format(project.startDate!)
-                              : 'N/A',
-                            style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500),
+                            'Valuation visit',
+                            style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.event_available, size: 14, color: Colors.grey[500]),
+                              const SizedBox(width: 4),
+                              Text(
+                                _formatNextVisitLine(project.nextScheduledVisit),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[800],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -190,6 +214,25 @@ class FieldOfficerProjectCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (onScheduleVisit != null) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => onScheduleVisit!(project),
+                      icon: const Icon(Icons.event_note_outlined, size: 18),
+                      label: const Text('Set valuation date'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0D47A1),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: Color(0xFF1976D2)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 if (project.status == 'in_progress') ...[
                   const SizedBox(height: 12),
                   SizedBox(

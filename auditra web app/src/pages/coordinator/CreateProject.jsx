@@ -337,6 +337,7 @@ export default function CreateProject() {
               <Grid item xs={12}><TextField fullWidth label="Description" name="description" value={form.description} onChange={handleChange} multiline rows={3} required /></Grid>
               <Grid item xs={12} sm={4}>
                 <TextField select fullWidth label="Priority" name="priority" value={form.priority} onChange={handleChange}>
+                  <MenuItem value="urgent">Urgent</MenuItem>
                   <MenuItem value="high">High</MenuItem>
                   <MenuItem value="medium">Medium</MenuItem>
                   <MenuItem value="low">Low</MenuItem>

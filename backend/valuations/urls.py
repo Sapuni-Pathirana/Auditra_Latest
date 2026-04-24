@@ -13,11 +13,11 @@ urlpatterns = [
     path('<int:pk>/reject/', views.reject_valuation, name='valuation-reject'),
     path('<int:pk>/approve/', views.senior_valuer_approve_valuation, name='valuation-approve'),
     path('<int:pk>/senior-valuer-reject/', views.senior_valuer_reject_valuation, name='senior-valuer-reject'),
-    
+
     # Senior valuer endpoints
     path('senior-valuer/reviewed/', views.SeniorValuerValuationListView.as_view(), name='senior-valuer-valuations'),
     path('<int:pk>/submit-proposal/', views.senior_valuer_submit_proposal, name='senior-valuer-submit-proposal'),
-    
+
     # MD/GM endpoints
     path('md-gm/valuations/', views.MDGMValuationListView.as_view(), name='md-gm-valuations'),
     path('<int:pk>/md-gm-approve/', views.md_gm_approve_valuation, name='md-gm-approve'),
@@ -26,11 +26,6 @@ urlpatterns = [
     # Valuation photo endpoints
     path('<int:valuation_id>/photos/', views.ValuationPhotoListCreateView.as_view(), name='valuation-photo-list-create'),
     path('photos/<int:pk>/', views.ValuationPhotoDetailView.as_view(), name='valuation-photo-detail'),
-
-    # Notification endpoints
-    path('notifications/', views.NotificationListView.as_view(), name='notification-list'),
-    path('notifications/unread-count/', views.unread_notification_count, name='notification-unread-count'),
-    path('notifications/<int:pk>/read/', views.mark_notification_read, name='notification-mark-read'),
-    path('notifications/mark-all-read/', views.mark_all_notifications_read, name='notification-mark-all-read'),
+    path('<int:valuation_id>/photos/reorder/', views.reorder_valuation_photos, name='valuation-photo-reorder'),
+    path('<int:valuation_id>/photos/<int:photo_id>/set-primary/', views.set_primary_photo, name='valuation-photo-set-primary'),
 ]
-

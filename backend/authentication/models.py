@@ -150,7 +150,9 @@ class PaymentSlip(models.Model):
     overtime_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)  # Total overtime hours for the month
     overtime_hours_uploaded = models.BooleanField(default=False)  # Flag to track if overtime hours were uploaded manually
     overtime_pay = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)  # Overtime payment
-    net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)  # Net salary (basic + allowances + overtime - EPF)
+    net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)  # Net salary (basic + allowances + overtime - EPF - leave_deduction)
+    leave_deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    excess_leave_days = models.DecimalField(max_digits=5, decimal_places=1, default=0.0)
     role = models.CharField(max_length=50)
     role_display = models.CharField(max_length=100)
     pay_slip_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
@@ -602,7 +604,7 @@ class EmployeeFormSubmission(models.Model):
 
 
 class LeaveRequest(models.Model):
-    """Leave Request Model"""
+    """Leave Request Model — supports full-day and half-day requests."""
     
     LEAVE_TYPE_CHOICES = [
         ('annual', 'Annual Leave'),
@@ -616,6 +618,12 @@ class LeaveRequest(models.Model):
         ('pending', 'Pending'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
+        ('cancelled_by_user', 'Cancelled by Employee'),
+    ]
+
+    HALF_DAY_PERIOD_CHOICES = [
+        ('morning', 'Morning'),
+        ('afternoon', 'Afternoon'),
     ]
     
     user = models.ForeignKey(
@@ -638,6 +646,24 @@ class LeaveRequest(models.Model):
         related_name='reviewed_leave_requests'
     )
     notes = models.TextField(blank=True, null=True)
+
+    # Half-day fields
+    is_half_day = models.BooleanField(default=False)
+    half_day_period = models.CharField(
+        max_length=10,
+        choices=HALF_DAY_PERIOD_CHOICES,
+        blank=True, null=True,
+        help_text='Required when is_half_day=True'
+    )
+
+    # Cancellation fields
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    cancelled_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='cancelled_leave_requests',
+    )
     
     class Meta:
         db_table = 'leave_requests'
@@ -650,8 +676,47 @@ class LeaveRequest(models.Model):
     
     @property
     def days(self):
-        """Calculate number of leave days"""
-        return (self.end_date - self.start_date).days + 1
+        """Return leave duration in days (0.5 for half-day)."""
+        if self.is_half_day:
+            return Decimal('0.5')
+        return Decimal((self.end_date - self.start_date).days + 1)
+
+
+class LeavePolicy(models.Model):
+    """Quota configuration per role per leave type."""
+
+    role = models.CharField(max_length=50, choices=UserRole.ROLE_CHOICES)
+    leave_type = models.CharField(max_length=20, choices=LeaveRequest.LEAVE_TYPE_CHOICES)
+    annual_quota_days = models.DecimalField(max_digits=5, decimal_places=1, default=14)
+    allow_half_day = models.BooleanField(default=True)
+    working_days_per_month = models.PositiveSmallIntegerField(default=22)
+
+    class Meta:
+        db_table = 'leave_policies'
+        unique_together = ('role', 'leave_type')
+        verbose_name = 'Leave Policy'
+        verbose_name_plural = 'Leave Policies'
+
+    def __str__(self):
+        return f"{self.role} / {self.leave_type} — {self.annual_quota_days}d"
+
+
+class LeaveBalance(models.Model):
+    """Running balance of used leave days per user per year per type."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='leave_balances')
+    year = models.PositiveIntegerField()
+    leave_type = models.CharField(max_length=20, choices=LeaveRequest.LEAVE_TYPE_CHOICES)
+    used_days = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+
+    class Meta:
+        db_table = 'leave_balances'
+        unique_together = ('user', 'year', 'leave_type')
+        verbose_name = 'Leave Balance'
+        verbose_name_plural = 'Leave Balances'
+
+    def __str__(self):
+        return f"{self.user.username} / {self.year} / {self.leave_type}: {self.used_days}d"
 
 
 class EmployeeRemovalRequest(models.Model):
@@ -693,3 +758,85 @@ class EmployeeRemovalRequest(models.Model):
     
     def __str__(self):
         return f"Removal request for {self.user.username} by {self.requested_by.username} - {self.get_status_display()}"
+
+
+# ---------------------------------------------------------------------------
+# UserProfile — avatar, theme, personal settings
+# ---------------------------------------------------------------------------
+
+class UserProfile(models.Model):
+    """Extended profile attached to every User (auto-created via signal)."""
+
+    THEME_CHOICES = [
+        ('light', 'Light'),
+        ('dark', 'Dark'),
+        ('system', 'System'),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='userprofile')
+    profile_image = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    theme_preference = models.CharField(max_length=10, choices=THEME_CHOICES, default='system')
+    phone = models.CharField(max_length=20, blank=True)
+    bio = models.TextField(blank=True)
+    timezone = models.CharField(max_length=50, default='Asia/Colombo')
+    locale = models.CharField(max_length=10, default='en')
+    preferences = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_profiles'
+        verbose_name = 'User Profile'
+
+    def __str__(self):
+        return f"Profile: {self.user.username}"
+
+    def profile_image_url(self, request=None):
+        if self.profile_image:
+            if request:
+                return request.build_absolute_uri(self.profile_image.url)
+            return self.profile_image.url
+        return None
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    """Auto-create a UserProfile whenever a new User is created."""
+    if created:
+        UserProfile.objects.get_or_create(user=instance)
+
+
+# ---------------------------------------------------------------------------
+# Invitation — track auto-created account credential emails
+# ---------------------------------------------------------------------------
+
+class Invitation(models.Model):
+    """Tracks every credential email sent when an auto-account is created."""
+
+    STATUS_CHOICES = [
+        ('sent', 'Sent'),
+        ('delivered', 'Delivered'),
+        ('bounced', 'Bounced'),
+        ('accepted', 'Accepted (First Login)'),
+        ('password_changed', 'Password Changed'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='invitations', null=True, blank=True)
+    email = models.EmailField()
+    role = models.CharField(max_length=50, choices=UserRole.ROLE_CHOICES)
+    channel = models.CharField(max_length=20, default='email')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='sent')
+    invited_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_invitations'
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    sent_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'invitations'
+        ordering = ['-sent_at']
+        verbose_name = 'Invitation'
+        verbose_name_plural = 'Invitations'
+
+    def __str__(self):
+        return f"Invite {self.email} ({self.role}) — {self.status}"

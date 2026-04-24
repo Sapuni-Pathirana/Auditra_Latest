@@ -14,6 +14,8 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import BlockIcon from '@mui/icons-material/Block';
 import HistoryIcon from '@mui/icons-material/History';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import MailIcon from '@mui/icons-material/Mail';
 
 export const roleMenuConfig = {
   admin: [
@@ -25,7 +27,9 @@ export const roleMenuConfig = {
     { label: 'User Management', path: '/dashboard/users', icon: PeopleIcon },
     { label: 'Projects', path: '/dashboard/projects', icon: FolderIcon },
     { label: 'Removal Requests', path: '/dashboard/removal-requests', icon: PersonRemoveIcon },
+    { label: 'Invitations', path: '/dashboard/invitations', icon: MailIcon },
     { label: 'System Logs', path: '/dashboard/system-logs', icon: HistoryIcon },
+    { label: 'Notifications', path: '/dashboard/notifications', icon: NotificationsIcon },
     { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   hr_head: [
@@ -34,6 +38,7 @@ export const roleMenuConfig = {
     { label: 'Request Removal', path: '/dashboard/request-removal', icon: PersonRemoveIcon },
     { label: 'Attendance Summary', path: '/dashboard/attendance-summary', icon: EventNoteIcon },
     { label: 'Payments', path: '/dashboard/payments', icon: PaymentIcon },
+    { label: 'Notifications', path: '/dashboard/notifications', icon: NotificationsIcon },
     { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   coordinator: [
@@ -44,6 +49,7 @@ export const roleMenuConfig = {
     { label: 'My Attendance', path: '/dashboard/my-attendance', icon: EventNoteIcon },
     { label: 'My Payments', path: '/dashboard/my-payments', icon: PaymentIcon },
     { label: 'My Leave', path: '/dashboard/my-leave', icon: BeachAccessIcon },
+    { label: 'Notifications', path: '/dashboard/notifications', icon: NotificationsIcon },
     { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   accessor: [
@@ -52,6 +58,7 @@ export const roleMenuConfig = {
     { label: 'My Attendance', path: '/dashboard/my-attendance', icon: EventNoteIcon },
     { label: 'My Payments', path: '/dashboard/my-payments', icon: PaymentIcon },
     { label: 'My Leave', path: '/dashboard/my-leave', icon: BeachAccessIcon },
+    { label: 'Notifications', path: '/dashboard/notifications', icon: NotificationsIcon },
     { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   senior_valuer: [
@@ -61,6 +68,7 @@ export const roleMenuConfig = {
     { label: 'My Payments', path: '/dashboard/my-payments', icon: PaymentIcon },
     { label: 'My Projects', path: '/dashboard/sv-projects', icon: FolderIcon },
     { label: 'My Leave', path: '/dashboard/my-leave', icon: BeachAccessIcon },
+    { label: 'Notifications', path: '/dashboard/notifications', icon: NotificationsIcon },
     { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   md_gm: [
@@ -70,6 +78,7 @@ export const roleMenuConfig = {
     { label: 'My Attendance', path: '/dashboard/my-attendance', icon: EventNoteIcon },
     { label: 'My Payments', path: '/dashboard/my-payments', icon: PaymentIcon },
     { label: 'My Leave', path: '/dashboard/my-leave', icon: BeachAccessIcon },
+    { label: 'Notifications', path: '/dashboard/notifications', icon: NotificationsIcon },
     { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   field_officer: [
@@ -78,12 +87,14 @@ export const roleMenuConfig = {
     { label: 'My Attendance', path: '/dashboard/my-attendance', icon: EventNoteIcon },
     { label: 'My Payments', path: '/dashboard/my-payments', icon: PaymentIcon },
     { label: 'My Leave', path: '/dashboard/my-leave', icon: BeachAccessIcon },
+    { label: 'Notifications', path: '/dashboard/notifications', icon: NotificationsIcon },
     { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   general_employee: [
     { label: 'My Attendance', path: '/dashboard', icon: EventNoteIcon },
     { label: 'My Leave', path: '/dashboard/my-leave', icon: BeachAccessIcon },
     { label: 'My Payments', path: '/dashboard/my-payments', icon: PaymentIcon },
+    { label: 'Notifications', path: '/dashboard/notifications', icon: NotificationsIcon },
     { label: 'Profile', path: '/dashboard/profile', icon: PersonIcon },
   ],
   client: [

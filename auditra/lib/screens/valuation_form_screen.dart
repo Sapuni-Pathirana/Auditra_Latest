@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'dart:io';
 import '../services/api_service.dart';
 import '../services/pdf_service.dart';
 import '../models/project_model.dart';
 import '../models/valuation_model.dart';
+import '../widgets/item_suggestions_widget.dart';
+import '../widgets/depreciation_widget.dart';
 
 class ValuationFormScreen extends StatefulWidget {
   final Project project;
@@ -71,8 +75,17 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
   final _otherSpecificationsController = TextEditingController();
   
   List<File> _selectedPhotos = [];
+  // Feature #9: parallel metadata list — same index as _selectedPhotos
+  final List<Map<String, dynamic>> _photoMeta = [];
+  int _primaryPhotoIndex = 0;
   List<ValuationPhoto> _existingPhotos = [];
   int? _valuationId;
+
+  // Feature #10: item suggestion panel state
+  bool _showSuggestions = false;
+  String _lastSuggestionQuery = '';
+  // Feature #12: depreciation override state (set by DepreciationWidget)
+  Map<String, dynamic>? _depreciationResult;
 
   @override
   void initState() {
@@ -259,44 +272,82 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     super.dispose();
   }
 
+  /// Feature #9: compress image and return the compressed file.
+  Future<File?> _compressImage(File original) async {
+    final targetPath = '${original.path}_compressed.jpg';
+    final result = await FlutterImageCompress.compressAndGetFile(
+      original.absolute.path,
+      targetPath,
+      quality: 75,
+      minWidth: 1280,
+      minHeight: 720,
+    );
+    return result != null ? File(result.path) : original;
+  }
+
+  /// Feature #9: get device identifier
+  Future<String> _getDeviceId() async {
+    try {
+      final info = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final android = await info.androidInfo;
+        return android.id;
+      } else if (Platform.isIOS) {
+        final ios = await info.iosInfo;
+        return ios.identifierForVendor ?? 'unknown';
+      }
+    } catch (_) {}
+    return 'unknown';
+  }
+
+  /// Feature #9: capture per-photo metadata (gps, timestamp, device_id).
+  Future<Map<String, dynamic>> _capturePhotoMeta() async {
+    final meta = <String, dynamic>{
+      'captured_at': DateTime.now().toIso8601String(),
+      'device_id': await _getDeviceId(),
+    };
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      ).timeout(const Duration(seconds: 8));
+      meta['gps_lat'] = pos.latitude;
+      meta['gps_lon'] = pos.longitude;
+    } catch (_) {}
+    return meta;
+  }
+
   Future<void> _pickImage() async {
     try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
-      
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
+        final compressed = await _compressImage(File(image.path)) ?? File(image.path);
+        final meta = await _capturePhotoMeta();
         setState(() {
-          _selectedPhotos.add(File(image.path));
+          _selectedPhotos.add(compressed);
+          _photoMeta.add(meta);
         });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking image: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
       }
     }
   }
 
   Future<void> _takePhoto() async {
     try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-      );
-      
+      final XFile? image = await _picker.pickImage(source: ImageSource.camera);
       if (image != null) {
+        final compressed = await _compressImage(File(image.path)) ?? File(image.path);
+        final meta = await _capturePhotoMeta();
         setState(() {
-          _selectedPhotos.add(File(image.path));
+          _selectedPhotos.add(compressed);
+          _photoMeta.add(meta);
         });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error taking photo: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error taking photo: $e')));
       }
     }
   }
@@ -391,6 +442,9 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         return value.trim();
       }
 
+      // Feature #9: capture once at save-time to stamp photos uploaded below
+      final deviceId = await _getDeviceId();
+      final capturedAt = DateTime.now().toIso8601String();
       Map<String, dynamic> data = {
         'project': widget.project.id,
         'category': _category,
@@ -456,7 +510,28 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         }
         notes = notes != null && notes.isNotEmpty ? '$notes$calculationInfo' : calculationInfo;
       }
-      
+
+      // Feature #12: append computed depreciation snapshot to notes for audit
+      if (_depreciationResult != null) {
+        final d = _depreciationResult!;
+        final depBlock = '\n\n[DEPRECIATION]\n'
+            'Method: ${d['method'] ?? ''}\n'
+            'Book Value: ${d['computed_book_value'] ?? ''}\n'
+            'Depreciation Amount: ${d['depreciation_amount'] ?? ''}\n'
+            'Applied Rate: ${d['applied_rate'] ?? ''}\n'
+            'Override Reason: ${d['override_reason'] ?? ''}\n'
+            '[/DEPRECIATION]';
+        if (notes != null) {
+          notes = notes.replaceAll(
+            RegExp(r'\[DEPRECIATION\].*?\[/DEPRECIATION\]', dotAll: true, caseSensitive: false),
+            '',
+          ).trim();
+          notes = '$notes$depBlock';
+        } else {
+          notes = depBlock;
+        }
+      }
+
       if (notes != null) data['notes'] = notes;
 
       // Add category-specific fields
@@ -538,7 +613,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
 
       if (result['success']) {
         final valuationData = result['data'];
-        final synced = result['synced'] ?? true; // Default to true if not specified
+        // Feature #4 fix: 'synced' key now explicitly returned by createValuation
+        final synced = result['synced'] ?? true;
         
         // Show offline indicator if saved offline
         if (!synced && mounted) {
@@ -641,13 +717,23 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         
         print('Using valuation ID: $newValuationId');
         
-        // Upload photos
-        for (var photo in _selectedPhotos) {
+        // Upload photos with metadata (Feature #9)
+        for (var i = 0; i < _selectedPhotos.length; i++) {
+          final photo = _selectedPhotos[i];
+          final meta = i < _photoMeta.length ? _photoMeta[i] : <String, dynamic>{};
           try {
-            await ApiService.uploadValuationPhoto(newValuationId, photo.path);
+            await ApiService.uploadValuationPhoto(
+              newValuationId,
+              photo.path,
+              isPrimary: i == _primaryPhotoIndex,
+              ordering: i,
+              capturedAt: (meta['captured_at'] as String?) ?? capturedAt,
+              gpsLat: meta['gps_lat'] is num ? (meta['gps_lat'] as num).toDouble() : null,
+              gpsLon: meta['gps_lon'] is num ? (meta['gps_lon'] as num).toDouble() : null,
+              deviceId: (meta['device_id'] as String?) ?? deviceId,
+            );
           } catch (e) {
             print('Error uploading photo: $e');
-            // Continue with other photos even if one fails
           }
         }
 
@@ -1169,6 +1255,48 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                           icon: Icons.description,
                           maxLines: 3,
                         ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            icon: const Icon(Icons.lightbulb_outline),
+                            label: Text(_showSuggestions ? 'Hide suggestions' : 'Find similar items'),
+                            onPressed: () {
+                              setState(() {
+                                _showSuggestions = !_showSuggestions;
+                                _lastSuggestionQuery = _descriptionController.text.trim();
+                              });
+                            },
+                          ),
+                        ),
+                        if (_showSuggestions && _descriptionController.text.trim().length >= 2)
+                          Container(
+                            margin: const EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: ItemSuggestionsWidget(
+                              initialQuery: _lastSuggestionQuery,
+                              category: _category,
+                              onConfirm: (item) {
+                                setState(() {
+                                  _descriptionController.text = (item['title'] ?? '').toString();
+                                  _showSuggestions = false;
+                                });
+                              },
+                              onEdit: (edited) {
+                                setState(() {
+                                  _descriptionController.text = (edited['title'] ?? '').toString();
+                                  _showSuggestions = false;
+                                });
+                              },
+                              onCreateNew: () {
+                                setState(() => _showSuggestions = false);
+                              },
+                            ),
+                          ),
                         const SizedBox(height: 16),
                         _buildModernTextField(
                           _estimatedValueController,
@@ -1200,7 +1328,17 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-            
+                  // Feature #12: Depreciation calculator (not applicable for land)
+                  if (_category != 'land') ...[
+                    DepreciationWidget(
+                      category: _category,
+                      onResult: (result) {
+                        _depreciationResult = result;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Category-specific fields
                   if (_category == 'land') _buildLandFields(),
                   if (_category == 'building') _buildBuildingFields(),
@@ -2042,23 +2180,96 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        if (_existingPhotos.isNotEmpty || _selectedPhotos.isNotEmpty)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ..._existingPhotos.map((photo) => _buildPhotoThumbnail(
+        if (_existingPhotos.isNotEmpty || _selectedPhotos.isNotEmpty) ...[
+          if (_selectedPhotos.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Long-press and drag to reorder. Tap the star to mark as the primary photo.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: true,
+              itemCount: _selectedPhotos.length,
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  if (newIndex > oldIndex) newIndex -= 1;
+                  final photo = _selectedPhotos.removeAt(oldIndex);
+                  _selectedPhotos.insert(newIndex, photo);
+                  if (_photoMeta.length > oldIndex) {
+                    final m = _photoMeta.removeAt(oldIndex);
+                    _photoMeta.insert(newIndex.clamp(0, _photoMeta.length), m);
+                  }
+                  if (_primaryPhotoIndex == oldIndex) {
+                    _primaryPhotoIndex = newIndex;
+                  } else if (_primaryPhotoIndex > oldIndex && _primaryPhotoIndex <= newIndex) {
+                    _primaryPhotoIndex -= 1;
+                  } else if (_primaryPhotoIndex < oldIndex && _primaryPhotoIndex >= newIndex) {
+                    _primaryPhotoIndex += 1;
+                  }
+                });
+              },
+              itemBuilder: (ctx, i) {
+                final photo = _selectedPhotos[i];
+                return Padding(
+                  key: ValueKey(photo.path),
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          i == _primaryPhotoIndex ? Icons.star : Icons.star_border,
+                          color: i == _primaryPhotoIndex ? Colors.amber[700] : Colors.grey,
+                        ),
+                        tooltip: 'Mark as primary',
+                        onPressed: () => setState(() => _primaryPhotoIndex = i),
+                      ),
+                      SizedBox(
+                        width: 70,
+                        height: 70,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(photo, fit: BoxFit.cover),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          photo.path.split('/').last,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        onPressed: () => setState(() {
+                          _selectedPhotos.removeAt(i);
+                          if (i < _photoMeta.length) _photoMeta.removeAt(i);
+                          if (_primaryPhotoIndex >= _selectedPhotos.length) {
+                            _primaryPhotoIndex = _selectedPhotos.isEmpty ? 0 : _selectedPhotos.length - 1;
+                          }
+                        }),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+          if (_existingPhotos.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _existingPhotos.map((photo) => _buildPhotoThumbnail(
                 photoUrl: photo.photoUrl,
                 onDelete: () => _deletePhoto(photo),
-              )),
-              ..._selectedPhotos.map((photo) => _buildPhotoThumbnail(
-                photoFile: photo,
-                onDelete: () {
-                  setState(() => _selectedPhotos.remove(photo));
-                },
-              )),
-            ],
-          ),
+              )).toList(),
+            ),
+          ],
+        ],
       ],
     );
   }

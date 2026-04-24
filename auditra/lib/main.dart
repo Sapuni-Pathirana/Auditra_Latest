@@ -1,14 +1,43 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:provider/provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/api_service.dart';
-
+import 'services/sync_engine.dart';
+import 'services/theme_service.dart';
+import 'services/error_reporter.dart';
+import 'services/realtime_service.dart';
+import 'services/push_service.dart';
 import 'theme/app_colors.dart';
 
-void main() {
-  HttpOverrides.global = MyHttpOverrides();
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Hive initialisation
+  await Hive.initFlutter();
+  await SyncEngine.init();
+
+  // Global error handler
+  FlutterError.onError = (details) {
+    ErrorReporter.reportFlutterError(details);
+  };
+
+  runZonedGuarded(() {
+    HttpOverrides.global = MyHttpOverrides();
+    final themeService = ThemeService();
+
+    runApp(
+      ChangeNotifierProvider.value(
+        value: themeService,
+        child: const MyApp(),
+      ),
+    );
+  }, (error, stack) {
+    ErrorReporter.reportError(error, stack);
+  });
 }
 
 class MyHttpOverrides extends HttpOverrides {
@@ -24,112 +53,13 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeService = Provider.of<ThemeService>(context);
     return MaterialApp(
       title: 'Auditra',
       debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-        colorScheme: const ColorScheme.light(
-          primary: AppColors.primary,
-          secondary: AppColors.secondary,
-          tertiary: AppColors.accent,
-          surface: AppColors.surface,
-          error: AppColors.error,
-          onPrimary: Colors.white,
-          onSecondary: Colors.white,
-          onTertiary: Colors.white,
-          onSurface: AppColors.text,
-          onError: Colors.white,
-          outline: AppColors.border,
-        ),
-        scaffoldBackgroundColor: AppColors.background,
-        useMaterial3: true,
-        fontFamily: 'Inter',
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.headerBg,
-          foregroundColor: AppColors.headerText,
-          elevation: 0,
-          centerTitle: true,
-          titleTextStyle: TextStyle(
-            color: AppColors.headerText,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'Inter',
-          ),
-          iconTheme: IconThemeData(color: AppColors.headerText),
-          shape: Border(
-            bottom: BorderSide(color: AppColors.divider, width: 1),
-          ),
-        ),
-        cardTheme: CardThemeData(
-          color: AppColors.surface,
-          elevation: 0,
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.divider, width: 1),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            textStyle: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              fontFamily: 'Inter',
-            ),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.primary,
-            side: const BorderSide(color: AppColors.primary, width: 1.5),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            textStyle: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              fontFamily: 'Inter',
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: AppColors.surface,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.divider),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.divider),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        ),
-        dividerColor: AppColors.divider,
-        chipTheme: ChipThemeData(
-          backgroundColor: AppColors.cardInner,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          labelStyle: const TextStyle(
-            color: AppColors.text,
-            fontWeight: FontWeight.w500,
-            fontSize: 12,
-          ),
-        ),
-      ),
+      theme: AppColors.lightTheme,
+      darkTheme: AppColors.darkTheme,
+      themeMode: themeService.mode,
       home: const SplashScreen(),
     );
   }
@@ -150,18 +80,48 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkAuthStatus() async {
-    // Add a small delay for splash effect
     await Future.delayed(const Duration(seconds: 1));
-
     final isLoggedIn = await ApiService.isLoggedIn();
-
     if (!mounted) return;
 
     if (isLoggedIn) {
-      // Get user role to route to appropriate dashboard
-      await ApiService.getMyRole();
+      // Feature #3 (C1): initialise push + real-time channels once logged in.
+      try {
+        await PushService.init();
+      } catch (_) {}
+      try {
+        await RealTimeService.instance.connect('/ws/notifications/');
+        RealTimeService.instance.addHandler((msg) {
+          final title = (msg['title'] ?? msg['type'] ?? 'Notification').toString();
+          final body = (msg['message'] ?? msg['body'] ?? '').toString();
+          PushService.showNotification(
+            title: title,
+            body: body,
+            payload: msg['action_url']?.toString(),
+          );
+        });
+      } catch (_) {}
+
+      final roleResult = await ApiService.getMyRole();
+      if (!mounted) return;
+
+      // If both access and refresh tokens are expired, force re-login
+      if (roleResult['success'] == false) {
+        final msg = roleResult['message'] ?? '';
+        final isAuthError = msg.contains('expired') ||
+            msg.contains('login') ||
+            msg.contains('authenticated') ||
+            msg.contains('Session');
+        if (isAuthError) {
+          await ApiService.logout();
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+          return;
+        }
+      }
+
       final role = await ApiService.getUserRole();
-      
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => HomeScreen(userRole: role ?? 'unassigned'),
@@ -178,38 +138,22 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: const [
-              AppColors.primaryLight,
-              AppColors.primaryDark,
-            ],
+            colors: [AppColors.primaryLight, AppColors.primaryDark],
           ),
         ),
         child: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.verified_user,
-                size: 100,
-                color: Colors.white,
-              ),
+              Icon(Icons.verified_user, size: 100, color: Colors.white),
               SizedBox(height: 24),
-              Text(
-                'Auditra',
-                style: TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
+              Text('Auditra', style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white)),
               SizedBox(height: 16),
-              CircularProgressIndicator(
-                color: Colors.white,
-              ),
+              CircularProgressIndicator(color: Colors.white),
             ],
           ),
         ),

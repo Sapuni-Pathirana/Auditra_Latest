@@ -964,3 +964,117 @@ Project --> ProjectPayment (created)
     --> Coordinator reviews and approves/rejects
     --> Agent commission (if applicable) via CommissionReport
 ```
+
+---
+
+## New Entities (Feature Expansion)
+
+The following entities were added as part of the 16-feature expansion:
+
+### App: `notifications`
+
+| Entity                  | Key Fields                                                                         |
+|-------------------------|------------------------------------------------------------------------------------|
+| `Notification`          | user, title, message, category, severity, is_read, action_url, meta, created_at   |
+| `NotificationPreference`| user, category, in_app, email, push                                                |
+| `DeviceToken`           | user, token, platform, created_at, updated_at                                      |
+
+Relationships:
+```
+User ||--o{ Notification : "receives"
+User ||--o{ NotificationPreference : "configures"
+User ||--o{ DeviceToken : "registers"
+```
+
+### App: `standups`
+
+| Entity          | Key Fields                                                        |
+|-----------------|-------------------------------------------------------------------|
+| `StandupRoom`   | project (OneToOne)                                                |
+| `StandupMessage`| room, author, kind (work_to_do/work_done/free), body, created_at  |
+| `StandupMention`| message, mentioned_user                                           |
+
+Relationships:
+```
+Project ||--|| StandupRoom : "has one"
+StandupRoom ||--o{ StandupMessage : "contains"
+StandupMessage ||--o{ StandupMention : "tags"
+User }o--o{ StandupMention : "mentioned in"
+```
+
+### App: `projects` (new models)
+
+| Entity        | Key Fields                                                             |
+|---------------|------------------------------------------------------------------------|
+| `ProjectVisit`| project, field_officer, scheduled_date, status, notes, notified_at    |
+
+Relationships:
+```
+Project ||--o{ ProjectVisit : "has visits"
+User }o--o{ ProjectVisit : "scheduled by"
+ProjectDocument }o--o{ User : "visible_to (M2M)"
+```
+
+### App: `catalog`
+
+| Entity              | Key Fields                                                                          |
+|---------------------|-------------------------------------------------------------------------------------|
+| `ItemCatalog`       | title, category, specs, created_by, source, confidence_default                      |
+| `ExternalSource`    | name, config (JSON), is_active                                                      |
+| `DepreciationPolicy`| category, method, default_rate, salvage_rate, useful_life_years, units_lifetime     |
+
+Relationships:
+```
+User }o--o{ ItemCatalog : "created items"
+```
+
+### App: `reports`
+
+| Entity              | Key Fields                                                                                         |
+|---------------------|----------------------------------------------------------------------------------------------------|
+| `ProjectReport`     | project (OneToOne), status, final_pdf, comments                                                    |
+| `ValuationItem`     | report, category, title, specs, estimated_value, depreciation fields, catalog_ref, added_by         |
+| `ValuationItemPhoto`| item, photo, caption, is_primary, ordering, captured_at, gps_lat, gps_lon, device_id               |
+
+Relationships:
+```
+Project ||--|| ProjectReport : "has one combined report"
+ProjectReport ||--o{ ValuationItem : "contains"
+ValuationItem ||--o{ ValuationItemPhoto : "has photos"
+ItemCatalog }o--o{ ValuationItem : "referenced by"
+User }o--o{ ValuationItem : "added_by"
+```
+
+### App: `authentication` (new models)
+
+| Entity        | Key Fields                                                                       |
+|---------------|----------------------------------------------------------------------------------|
+| `Invitation`  | user, email, role, status (sent/accepted/password_changed), created_at            |
+| `UserProfile` | user (OneToOne), avatar, theme_preference, bio, phone, timezone, personal_settings |
+| `LeavePolicy` | role, leave_type, annual_quota_days                                               |
+| `LeaveBalance`| user, year, leave_type, used_days                                                 |
+
+Relationships:
+```
+User ||--|| UserProfile : "has profile"
+User ||--o{ Invitation : "tracked by"
+LeavePolicy }o--|| UserRole : "applies to role"
+User ||--o{ LeaveBalance : "tracked balance"
+```
+
+### Updated LeaveRequest Fields
+- `is_half_day` (bool)
+- `half_day_period` (morning/afternoon)
+- `cancelled_by_user` status
+- `cancelled_at`, `cancelled_by`
+- `days` property returns 0.5 for half-day
+
+### Updated PaymentSlip Fields
+- `leave_deduction` (decimal)
+- `excess_leave_days` (decimal)
+
+---
+
+## Updated Entity Count
+
+The system now contains **38 entities** across **8 Django apps** (previously 22 across 5).

@@ -204,6 +204,12 @@ class ValuationPhoto {
   final String? photoUrl;
   final String? caption;
   final DateTime uploadedAt;
+  final bool isPrimary;
+  final int ordering;
+  final DateTime? capturedAt;
+  final double? gpsLat;
+  final double? gpsLon;
+  final String? deviceId;
 
   ValuationPhoto({
     required this.id,
@@ -211,10 +217,15 @@ class ValuationPhoto {
     this.photoUrl,
     this.caption,
     required this.uploadedAt,
+    this.isPrimary = false,
+    this.ordering = 0,
+    this.capturedAt,
+    this.gpsLat,
+    this.gpsLon,
+    this.deviceId,
   });
 
   factory ValuationPhoto.fromJson(Map<String, dynamic> json) {
-    // Safely parse int fields
     int? parseInt(dynamic value) {
       if (value == null) return null;
       if (value is int) return value;
@@ -223,8 +234,15 @@ class ValuationPhoto {
       return null;
     }
 
+    double? parseDouble(dynamic value) {
+      if (value == null) return null;
+      if (value is double) return value;
+      if (value is int) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
+
     final id = parseInt(json['id']);
-    // valuationId may be missing when nested in Valuation serializer (it's implied by parent)
     final valuationId = parseInt(json['valuation'] ?? json['valuation_id']) ?? 0;
 
     if (id == null) {
@@ -233,10 +251,16 @@ class ValuationPhoto {
 
     return ValuationPhoto(
       id: id,
-      valuationId: valuationId, // Use 0 as placeholder if not provided (it's implied by parent)
+      valuationId: valuationId,
       photoUrl: json['photo_url'],
       caption: json['caption'],
       uploadedAt: DateTime.parse(json['uploaded_at']),
+      isPrimary: json['is_primary'] == true,
+      ordering: parseInt(json['ordering']) ?? 0,
+      capturedAt: json['captured_at'] != null ? DateTime.tryParse(json['captured_at'].toString()) : null,
+      gpsLat: parseDouble(json['gps_lat']),
+      gpsLon: parseDouble(json['gps_lon']),
+      deviceId: json['device_id']?.toString(),
     );
   }
 }

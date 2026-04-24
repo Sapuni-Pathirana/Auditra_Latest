@@ -3,7 +3,7 @@ import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, IconButton, TextField, InputAdornment,
   Tabs, Tab, Alert, Snackbar, Dialog, DialogTitle, DialogContent,
-  DialogActions, Button, CircularProgress
+  DialogActions, Button, CircularProgress, Chip,
 } from '@mui/material';
 import { Search, Check, Close, Visibility } from '@mui/icons-material';
 import leaveService from '../../services/leaveService';
@@ -107,7 +107,10 @@ export default function LeaveRequests() {
               filteredRequests.map((req) => (
                 <TableRow key={req.id} hover>
                   <TableCell>{req.user_name || req.employee_name || 'N/A'}</TableCell>
-                  <TableCell sx={{ textTransform: 'capitalize' }}>{req.leave_type || 'N/A'}</TableCell>
+                  <TableCell>
+                    <span style={{ textTransform: 'capitalize' }}>{req.leave_type || 'N/A'}</span>
+                    {req.is_half_day && <Chip label={`½ ${req.half_day_period}`} size="small" sx={{ ml: 0.5 }} />}
+                  </TableCell>
                   <TableCell>{formatDate(req.start_date)}</TableCell>
                   <TableCell>{formatDate(req.end_date)}</TableCell>
                   <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -161,7 +164,14 @@ export default function LeaveRequests() {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Box><Typography variant="subtitle2" color="text.secondary">Employee</Typography><Typography>{detailDialog.request.user_name || detailDialog.request.employee_name}</Typography></Box>
               <Box><Typography variant="subtitle2" color="text.secondary">Leave Type</Typography><Typography sx={{ textTransform: 'capitalize' }}>{detailDialog.request.leave_type}</Typography></Box>
-              <Box><Typography variant="subtitle2" color="text.secondary">Period</Typography><Typography>{formatDate(detailDialog.request.start_date)} - {formatDate(detailDialog.request.end_date)}</Typography></Box>
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary">Period</Typography>
+                <Typography>
+                  {formatDate(detailDialog.request.start_date)} - {formatDate(detailDialog.request.end_date)}
+                  {detailDialog.request.is_half_day && ` (½ day – ${detailDialog.request.half_day_period})`}
+                </Typography>
+              </Box>
+              <Box><Typography variant="subtitle2" color="text.secondary">Days</Typography><Typography>{detailDialog.request.days}</Typography></Box>
               <Box><Typography variant="subtitle2" color="text.secondary">Reason</Typography><Typography>{detailDialog.request.reason || 'No reason provided'}</Typography></Box>
               <Box><Typography variant="subtitle2" color="text.secondary">Status</Typography><StatusChip status={detailDialog.request.status} /></Box>
               {detailDialog.request.admin_remarks && (

@@ -11,7 +11,7 @@ import {
 import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
-import { formatDateTime, formatDate, formatCurrency, capitalize } from '../../utils/helpers';
+import { formatDateTime, formatDate, formatCurrency, capitalize, getPriorityColor, getPriorityBgColor } from '../../utils/helpers';
 
 const DetailField = ({ label, value }) => (
   <Box sx={{ mb: 2.5 }}>
@@ -170,8 +170,13 @@ export default function DirectProjectApprovals() {
                         <Chip
                           label={capitalize(project.priority) || 'Normal'}
                           size="small"
-                          color={project.priority === 'high' ? 'error' : project.priority === 'medium' ? 'warning' : 'default'}
-                          sx={{ width: 110, justifyContent: 'center' }}
+                          sx={{
+                            width: 110,
+                            justifyContent: 'center',
+                            bgcolor: getPriorityBgColor(project.priority),
+                            color: getPriorityColor(project.priority),
+                            fontWeight: 600,
+                          }}
                         />
                       </TableCell>
                       <TableCell>{formatCurrency(project.estimated_value)}</TableCell>

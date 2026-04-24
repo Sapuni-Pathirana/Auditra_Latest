@@ -44,6 +44,15 @@ from .views import (
     AcceptAssignmentView,
     RejectAssignmentView,
     AdminDashboardStatsView,
+    AdminKPIView,
+    InvitationListView,
+    PublicCheckEmailView,
+    CancelLeaveRequestView,
+    LeaveBalanceView,
+    LeavePolicyListView,
+    LeavePolicyDetailView,
+    UserProfileMeView,
+    UserAvatarUploadView,
 )
 
 urlpatterns = [
@@ -92,5 +101,18 @@ urlpatterns = [
     path('employee-submissions/<int:pk>/hire/', HireEmployeeSubmissionView.as_view(), name='hire-employee-submission'),
     path('role-salaries/', RoleSalariesView.as_view(), name='role-salaries'),
     path('admin-dashboard-stats/', AdminDashboardStatsView.as_view(), name='admin-dashboard-stats'),
+    path('admin-kpis/', AdminKPIView.as_view(), name='admin-kpis'),
+    # Feature #6 – invitations
+    path('invitations/', InvitationListView.as_view(), name='invitations-list'),
+    # Feature #7 – public email check (also available under projects/public/check-email)
+    path('public/check-email/', PublicCheckEmailView.as_view(), name='public-check-email'),
+    # Feature #15 – leave balance + policy + cancel
+    path('leave-requests/<int:pk>/cancel/', CancelLeaveRequestView.as_view(), name='cancel-leave-request'),
+    path('leave-balance/', LeaveBalanceView.as_view(), name='leave-balance'),
+    path('leave-policies/', LeavePolicyListView.as_view(), name='leave-policies'),
+    path('leave-policies/<int:pk>/', LeavePolicyDetailView.as_view(), name='leave-policy-detail'),
+    # Feature #16 – user profile
+    path('profile/me/', UserProfileMeView.as_view(), name='profile-me'),
+    path('profile/me/avatar/', UserAvatarUploadView.as_view(), name='profile-avatar'),
 ]
 

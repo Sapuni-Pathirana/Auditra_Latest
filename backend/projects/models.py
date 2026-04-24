@@ -14,6 +14,7 @@ class Project(models.Model):
     ]
     
     PRIORITY_CHOICES = [
+        ('urgent', 'Urgent'),
         ('high', 'High'),
         ('medium', 'Medium'),
         ('low', 'Low'),
@@ -177,7 +178,13 @@ class ProjectDocument(models.Model):
         null=True,
         blank=True,
         related_name='assigned_documents',
-        help_text='The assigned user this document is intended for'
+        help_text='The assigned user this document is intended for (legacy; use visible_to for ACL)'
+    )
+    visible_to = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='visible_documents',
+        help_text='Users who can see this document (empty = all project assignees + coordinator)',
     )
     uploaded_at = models.DateTimeField(auto_now_add=True)
     
@@ -501,3 +508,31 @@ class CommissionReport(models.Model):
 
     def __str__(self):
         return f"{self.project.title} - Commission Report - Rs. {self.commission_amount}"
+
+
+class ProjectVisit(models.Model):
+    """Field officer schedules a site visit for a project (Feature #2)."""
+
+    STATUS_CHOICES = [
+        ('scheduled', 'Scheduled'),
+        ('rescheduled', 'Rescheduled'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='visits')
+    field_officer = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='scheduled_visits'
+    )
+    scheduled_date = models.DateField()
+    note = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'project_visits'
+        ordering = ['-scheduled_date']
+
+    def __str__(self):
+        return f"Visit for {self.project.title} on {self.scheduled_date}"

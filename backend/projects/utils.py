@@ -149,6 +149,20 @@ def create_user_account(email, name, role_type, phone=None, address=None, compan
             user.set_password(password)
             user.save(update_fields=['password'])
 
+        # Feature #6 (C4): record invitation with invited_by (from calling context)
+        try:
+            from authentication.models import Invitation
+            Invitation.objects.update_or_create(
+                email=email.lower().strip(),
+                defaults={
+                    'user': user,
+                    'role': role_type,
+                    'status': 'sent',
+                },
+            )
+        except Exception:
+            pass
+
         return user, password
     except Exception as e:
         print(f"Error creating user account: {str(e)}")

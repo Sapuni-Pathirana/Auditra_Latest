@@ -40,6 +40,7 @@ ALLOWED_HOSTS = ALLOWED_HOSTS_ENV.split(',') if ALLOWED_HOSTS_ENV else ['*']
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -49,11 +50,20 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'channels',
+    'django_celery_beat',
+    # Project apps
     'authentication',
     'attendance',
     'projects',
     'valuations',
     'system_logs',
+    # New apps
+    'notifications',
+    'standups',
+    'catalog',
+    'reports',
+    'reports_v2',
 ]
 
 MIDDLEWARE = [
@@ -87,6 +97,48 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'auditra_backend.wsgi.application'
+ASGI_APPLICATION = 'auditra_backend.asgi.application'
+
+# Django Channels channel layer
+# Uses InMemoryChannelLayer for local development (avoids needing Redis 5+).
+# Switch to RedisChannelLayer for production (requires Redis >= 5.0).
+_USE_REDIS_CHANNEL_LAYER = config('USE_REDIS_CHANNEL_LAYER', default='False') == 'True'
+if _USE_REDIS_CHANNEL_LAYER:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [config('REDIS_URL', default='redis://localhost:6379')],
+            },
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
+
+# Celery settings
+CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379')
+CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379')
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# Periodic tasks (Feature #2 — visit reminders runs daily at 08:00 local time).
+from celery.schedules import crontab  # noqa: E402
+CELERY_BEAT_SCHEDULE = {
+    'send-visit-reminders-daily': {
+        'task': 'projects.send_visit_reminders',
+        'schedule': crontab(hour=8, minute=0),
+    },
+    'compute-leave-deductions-monthly': {
+        'task': 'authentication.compute_leave_deductions',
+        'schedule': crontab(hour=1, minute=0, day_of_month=28),
+    },
+}
+
+# FCM settings
+FCM_CREDENTIALS_PATH = config('FCM_CREDENTIALS_PATH', default='')
 
 
 # Database
@@ -103,6 +155,10 @@ DATABASES = {
     }
 }
 
+
+AUTHENTICATION_BACKENDS = [
+    'authentication.backends.EmailOrUsernameBackend',
+]
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators

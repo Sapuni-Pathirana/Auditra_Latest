@@ -1,17 +1,23 @@
 import secrets
 import string
 from rest_framework import status, generics
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models import Q
 from decimal import Decimal, InvalidOperation
-from .models import UserRole, PaymentSlip, ClientFormSubmission, EmployeeFormSubmission, LeaveRequest, EmployeeRemovalRequest, PasswordResetOTP
+from .models import (
+    UserRole, PaymentSlip, ClientFormSubmission, EmployeeFormSubmission,
+    LeaveRequest, EmployeeRemovalRequest, PasswordResetOTP,
+    UserProfile, Invitation, LeavePolicy, LeaveBalance,
+)
 from .serializers import (
     UserRegistrationSerializer, 
     UserSerializer, 
@@ -80,11 +86,34 @@ class LoginView(APIView):
             refresh = RefreshToken.for_user(user)
             user_data = UserSerializer(user).data
 
+            # Feature #6: expose password_change_required flag
+            password_change_required = False
+            try:
+                password_change_required = not user.role.password_changed
+            except Exception:
+                pass
+
+            # Feature #6: mark invitation as accepted on first login (match sent OR delivered)
+            try:
+                from authentication.models import Invitation
+                Invitation.objects.filter(user=user, status__in=['sent', 'delivered']).update(status='accepted')
+            except Exception:
+                pass
+
+            # Feature #16: include theme preference
+            theme = 'system'
+            try:
+                theme = user.userprofile.theme_preference
+            except Exception:
+                pass
+
             return Response({
                 'user': user_data,
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
-                'message': 'Login successful'
+                'message': 'Login successful',
+                'password_change_required': password_change_required,
+                'theme_preference': theme,
             }, status=status.HTTP_200_OK)
         else:
             # Log failed login attempt with the attempted username
@@ -142,12 +171,23 @@ class ChangePasswordView(APIView):
             )
 
         user.set_password(new_password)
-
-        # Mark password as changed (for client/agent accounts created via project creation)
-        if hasattr(user, 'role') and user.role:
-            user.role.password_changed = True
-
         user.save()
+
+        # Mark password as changed on the UserRole (for client/agent accounts created via project creation)
+        try:
+            if hasattr(user, 'role') and user.role:
+                user.role.password_changed = True
+                user.role.save(update_fields=['password_changed'])
+        except Exception:
+            pass
+
+        # Update the matching Invitation row (Feature #6)
+        try:
+            Invitation.objects.filter(email__iexact=user.email).exclude(status='password_changed').update(
+                status='password_changed'
+            )
+        except Exception:
+            pass
 
         try:
             from system_logs.utils import log_action, get_client_ip
@@ -243,6 +283,14 @@ class PasswordResetConfirmView(APIView):
         if hasattr(user, 'role') and user.role:
             user.role.password_changed = True
             user.role.save()
+
+        # Update matching Invitation row (Feature #6)
+        try:
+            Invitation.objects.filter(email__iexact=user.email).exclude(status='password_changed').update(
+                status='password_changed'
+            )
+        except Exception:
+            pass
 
         PasswordResetOTP.objects.filter(email__iexact=email).delete()
 
@@ -1214,6 +1262,29 @@ class CreateLeaveRequestView(APIView):
                     )
                 except Exception:
                     pass
+
+                # Feature #3 (C1): notify all HR heads of the new request.
+                try:
+                    from notifications.services import notify
+                    hr_heads = User.objects.filter(role__role='hr_head', is_active=True)
+                    employee_name = request.user.get_full_name() or request.user.username
+                    title = f'New leave request from {employee_name}'
+                    msg = (
+                        f"{employee_name} requested {leave_request.days} day(s) of "
+                        f"{leave_request.get_leave_type_display()} from {leave_request.start_date} "
+                        f"to {leave_request.end_date}."
+                    )
+                    meta = {'leave_id': leave_request.id}
+                    for hr in hr_heads:
+                        notify(
+                            user=hr, category='leave', severity='info',
+                            title=title, message=msg, meta=meta,
+                            action_url='/dashboard/leave-requests',
+                            email_subject=title,
+                        )
+                except Exception:
+                    pass
+
                 return Response({
                     'success': True,
                     'message': 'Leave request submitted successfully',
@@ -1434,6 +1505,43 @@ class UpdateLeaveRequestView(APIView):
                     category='leave',
                     ip_address=get_client_ip(request),
                     metadata={'leave_id': leave_request.id, 'status': new_status},
+                )
+            except Exception:
+                pass
+
+            # Feature #15 (C5): on approve, increment LeaveBalance.
+            if new_status == 'approved':
+                try:
+                    year = leave_request.start_date.year
+                    lb, _ = LeaveBalance.objects.get_or_create(
+                        user=leave_request.user,
+                        year=year,
+                        leave_type=leave_request.leave_type,
+                    )
+                    from decimal import Decimal
+                    lb.used_days = Decimal(str(lb.used_days)) + Decimal(str(leave_request.days))
+                    lb.save(update_fields=['used_days'])
+                except Exception:
+                    pass
+
+            # Feature #3 (C1): notify the employee of approve/reject decision.
+            try:
+                from notifications.services import notify
+                title = f'Leave request {new_status}'
+                msg = (
+                    f"Your {leave_request.get_leave_type_display()} request for "
+                    f"{leave_request.days} day(s) ({leave_request.start_date} → "
+                    f"{leave_request.end_date}) was {new_status}."
+                )
+                notify(
+                    user=leave_request.user,
+                    category='leave',
+                    severity='success' if new_status == 'approved' else 'warning',
+                    title=title,
+                    message=msg,
+                    meta={'leave_id': leave_request.id, 'status': new_status},
+                    action_url='/dashboard/my-leave-requests',
+                    email_subject=title,
                 )
             except Exception:
                 pass
@@ -1933,6 +2041,21 @@ class AssignCoordinatorView(APIView):
         except Exception:
             pass
 
+        try:
+            from notifications.services import notify
+            client_name = f'{submission.first_name} {submission.last_name}'.strip()
+            notify(
+                user=coordinator,
+                category='submission',
+                severity='info',
+                title='New Submission Assigned to You',
+                message=f'You have been assigned as coordinator for the submission from {client_name}. Please review and respond.',
+                meta={'submission_id': submission.id},
+                action_url='/dashboard/submissions',
+            )
+        except Exception:
+            pass
+
         serializer = ClientFormSubmissionSerializer(submission)
         return Response({'success': True, 'data': serializer.data}, status=status.HTTP_200_OK)
 
@@ -2018,6 +2141,23 @@ class ApproveClientSubmissionView(APIView):
                     category='submission',
                     ip_address=get_client_ip(request),
                 )
+            except Exception:
+                pass
+
+            try:
+                from notifications.services import notify
+                client_name = f'{submission.first_name} {submission.last_name}'.strip()
+                admins = User.objects.filter(role__role='admin', is_active=True)
+                for admin in admins:
+                    notify(
+                        user=admin,
+                        category='submission',
+                        severity='info',
+                        title='Client Submission Approved',
+                        message=f'Submission from {client_name} has been approved and is ready for project setup.',
+                        meta={'submission_id': submission.id},
+                        action_url='/dashboard/submissions',
+                    )
             except Exception:
                 pass
 
@@ -2256,6 +2396,20 @@ class HireEmployeeSubmissionView(APIView):
             submission.reviewed_by = request.user
             submission.reviewed_at = timezone.now()
             submission.save()
+
+            # Feature #6 (C4): create Invitation tracking row for employees.
+            try:
+                Invitation.objects.update_or_create(
+                    email=(submission.email or '').lower(),
+                    defaults={
+                        'user': user,
+                        'role': role,
+                        'status': 'sent',
+                        'invited_by': request.user,
+                    },
+                )
+            except Exception:
+                pass
 
             # Send status update email to employee
             try:
@@ -2498,5 +2652,435 @@ class AdminDashboardStatsView(APIView):
                 'medium': priority_dist.get('medium', 0),
                 'low': priority_dist.get('low', 0),
             },
+        })
+
+
+# ============================================================================
+# Feature #5: Extended Admin KPIs
+# ============================================================================
+
+class AdminKPIView(APIView):
+    """Rich KPIs for admin dashboard."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            if request.user.role.role != 'admin':
+                return Response({'error': 'Admin only'}, status=403)
+        except Exception:
+            return Response({'error': 'Admin only'}, status=403)
+
+        from django.db.models import Avg, Count, F, ExpressionWrapper, DurationField, Q
+        from django.db.models.functions import TruncMonth, TruncQuarter, TruncYear
+        from projects.models import Project, ProjectStatusHistory
+        from datetime import timedelta, date
+        from collections import defaultdict
+
+        now = timezone.now()
+        twelve_months_ago = now - timedelta(days=365)
+
+        # Projects completed on-time by employee per month
+        completed = Project.objects.filter(
+            status='completed',
+            end_date__isnull=False,
+            assigned_field_officer__isnull=False,
+        ).select_related('assigned_field_officer')
+
+        on_time_data = []
+        employee_times = defaultdict(list)  # employee_id → list of (days_taken,)
+        for p in completed:
+            actual_end = None
+            # C3 FIX: use last transition to completed (not first)
+            hist = p.history.filter(status='completed').order_by('-created_at').first()
+            if hist:
+                actual_end = hist.created_at.date()
+            on_time = actual_end is not None and actual_end <= p.end_date
+            fo = p.assigned_field_officer
+            month_label = (actual_end or p.end_date).strftime('%b %Y') if (actual_end or p.end_date) else None
+            on_time_data.append({
+                'employee_id': fo.id,
+                'employee_name': fo.get_full_name() or fo.username,
+                'on_time': on_time,
+                'month': month_label,
+            })
+            # Track duration for avg_time_per_job
+            if p.start_date:
+                end_for_calc = actual_end or p.end_date
+                if end_for_calc:
+                    days_taken = (end_for_calc - p.start_date).days
+                    employee_times[fo.id].append(days_taken)
+
+        # C3: on_time_delivery_summary — {month → {employee_name → {on_time, late, total}}}
+        on_time_summary = defaultdict(lambda: defaultdict(lambda: {'on_time': 0, 'late': 0, 'total': 0}))
+        for entry in on_time_data:
+            m = entry['month'] or 'N/A'
+            e = entry['employee_name']
+            on_time_summary[m][e]['total'] += 1
+            if entry['on_time']:
+                on_time_summary[m][e]['on_time'] += 1
+            else:
+                on_time_summary[m][e]['late'] += 1
+        on_time_summary_dict = {m: dict(employees) for m, employees in on_time_summary.items()}
+
+        # C3: avg_jobs_per_employee — completed projects per field officer
+        from django.contrib.auth.models import User as DjangoUser
+        fo_ids = (
+            Project.objects.filter(status='completed', assigned_field_officer__isnull=False)
+            .values_list('assigned_field_officer', flat=True).distinct()
+        )
+        avg_jobs = []
+        for foid in fo_ids:
+            try:
+                fo = DjangoUser.objects.get(id=foid)
+            except DjangoUser.DoesNotExist:
+                continue
+            total = Project.objects.filter(status='completed', assigned_field_officer_id=foid).count()
+            times = employee_times.get(foid, [])
+            avg_days = round(sum(times) / len(times), 1) if times else None
+            avg_jobs.append({
+                'employee_id': foid,
+                'employee_name': fo.get_full_name() or fo.username,
+                'completed_count': total,
+                'avg_days_per_job': avg_days,
+            })
+
+        # New clients by month (last 12 months)
+        new_clients = (
+            UserRole.objects.filter(
+                role='client',
+                created_at__gte=twelve_months_ago,
+            )
+            .annotate(month=TruncMonth('created_at'))
+            .values('month')
+            .annotate(count=Count('id'))
+            .order_by('month')
+        )
+        new_clients_chart = [
+            {'month': e['month'].strftime('%b %y'), 'count': e['count']}
+            for e in new_clients
+        ]
+
+        # Project status by period
+        def period_stats(trunc_fn):
+            return list(
+                Project.objects.annotate(period=trunc_fn('created_at'))
+                .values('period', 'status')
+                .annotate(count=Count('id'))
+                .order_by('period')
+            )
+
+        return Response({
+            'on_time_delivery': on_time_data,
+            'on_time_delivery_summary': on_time_summary_dict,
+            'avg_jobs_per_employee': avg_jobs,
+            'new_clients_by_month': new_clients_chart,
+            'project_status_by_month': period_stats(TruncMonth),
+            'project_status_by_quarter': period_stats(TruncQuarter),
+            'project_status_by_year': period_stats(TruncYear),
+        })
+
+
+# ============================================================================
+# Feature #6: Invitation tracking
+# ============================================================================
+
+class InvitationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            if request.user.role.role != 'admin':
+                return Response({'error': 'Admin only'}, status=403)
+        except Exception:
+            return Response({'error': 'Admin only'}, status=403)
+
+        role = request.query_params.get('role')
+        inv_status = request.query_params.get('status')
+        qs = Invitation.objects.select_related('user', 'invited_by').order_by('-sent_at')
+        if role:
+            qs = qs.filter(role=role)
+        if inv_status:
+            qs = qs.filter(status=inv_status)
+
+        data = []
+        for inv in qs[:200]:
+            data.append({
+                'id': inv.id,
+                'email': inv.email,
+                'role': inv.role,
+                'status': inv.status,
+                'sent_at': inv.sent_at,
+                'updated_at': inv.updated_at,
+                'user_id': inv.user_id,
+                'invited_by': inv.invited_by.get_full_name() if inv.invited_by else None,
+            })
+        return Response(data)
+
+
+# ============================================================================
+# Feature #7: Public email/role check
+# ============================================================================
+
+class PublicCheckEmailThrottle(AnonRateThrottle):
+    rate = '30/min'
+
+
+# Normalize intent aliases from public forms to actual DB role values
+_INTENT_ALIASES = {
+    'employee': 'general_employee',
+    'staff': 'general_employee',
+    'fieldofficer': 'field_officer',
+    'seniorvaluer': 'senior_valuer',
+    'md_gm': 'md_gm',
+    'mdgm': 'md_gm',
+    'hrhead': 'hr_head',
+    'hr': 'hr_head',
+}
+
+
+def _normalize_intent(intent):
+    if not intent:
+        return ''
+    normalized = intent.strip().lower().replace(' ', '_').replace('-', '_')
+    return _INTENT_ALIASES.get(normalized.replace('_', ''), _INTENT_ALIASES.get(normalized, normalized))
+
+
+class PublicCheckEmailView(APIView):
+    """Rate-limited public endpoint to check email-role conflicts on landing page."""
+    permission_classes = []
+    throttle_classes = [PublicCheckEmailThrottle]
+
+    def get(self, request):
+        email = request.query_params.get('email', '').strip().lower()
+        intent_raw = request.query_params.get('intent', '').strip()
+        intent = _normalize_intent(intent_raw)
+        if not email or not intent:
+            return Response({'error': 'email and intent required'}, status=400)
+
+        try:
+            user = User.objects.get(email__iexact=email)
+            existing_role = getattr(getattr(user, 'role', None), 'role', 'unassigned')
+            conflict = existing_role not in ('unassigned',) and existing_role != intent
+            return Response({
+                'exists': True,
+                'conflict': conflict,
+                'existing_role': existing_role,
+                'normalized_intent': intent,
+            })
+        except User.DoesNotExist:
+            return Response({'exists': False, 'conflict': False, 'normalized_intent': intent})
+
+
+# ============================================================================
+# Feature #15: Leave Balance, Policy, Cancel
+# ============================================================================
+
+class LeaveBalanceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import date
+        user = request.user
+        year = int(request.query_params.get('year', date.today().year))
+        role = getattr(getattr(user, 'role', None), 'role', 'general_employee')
+
+        policies = LeavePolicy.objects.filter(role=role)
+        balances = {b.leave_type: b.used_days for b in LeaveBalance.objects.filter(user=user, year=year)}
+
+        result = []
+        for policy in policies:
+            used = balances.get(policy.leave_type, 0)
+            remaining = max(policy.annual_quota_days - used, 0)
+            overdraft = max(used - policy.annual_quota_days, 0)
+            result.append({
+                'leave_type': policy.leave_type,
+                'quota': float(policy.annual_quota_days),
+                'used': float(used),
+                'remaining': float(remaining),
+                'overdraft': float(overdraft),
+            })
+        return Response({'year': year, 'balances': result})
+
+
+class CancelLeaveRequestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        from django.utils import timezone as tz
+        try:
+            leave = LeaveRequest.objects.get(pk=pk, user=request.user)
+        except LeaveRequest.DoesNotExist:
+            return Response({'error': 'Not found'}, status=404)
+
+        if leave.status != 'approved':
+            return Response({'error': 'Only approved leaves can be cancelled.'}, status=400)
+        if leave.start_date <= tz.now().date():
+            return Response({'error': 'Cannot cancel a leave that has already started or passed.'}, status=400)
+
+        leave.status = 'cancelled_by_user'
+        leave.cancelled_at = tz.now()
+        leave.cancelled_by = request.user
+        leave.save()
+
+        # Rollback leave balance
+        try:
+            bal, _ = LeaveBalance.objects.get_or_create(
+                user=request.user, year=leave.start_date.year, leave_type=leave.leave_type,
+                defaults={'used_days': 0},
+            )
+            bal.used_days = max(bal.used_days - leave.days, 0)
+            bal.save()
+        except Exception:
+            pass
+
+        # Notify HR head
+        from notifications.services import notify
+        hr_heads = User.objects.filter(role__role='hr_head')
+        employee_name = request.user.get_full_name() or request.user.username
+        for hr in hr_heads:
+            notify(
+                user=hr,
+                category='leave', severity='info',
+                title=f'Leave Cancelled: {employee_name}',
+                message=f'{employee_name} cancelled their {leave.get_leave_type_display()} leave ({leave.start_date} to {leave.end_date}).',
+                meta={'leave_id': leave.id, 'user_id': request.user.id},
+            )
+
+        return Response({'status': 'cancelled'})
+
+
+class LeavePolicyListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    queryset = LeavePolicy.objects.all()
+
+    def list(self, request, *args, **kwargs):
+        policies = LeavePolicy.objects.all()
+        return Response([{
+            'id': p.id, 'role': p.role, 'leave_type': p.leave_type,
+            'annual_quota_days': float(p.annual_quota_days),
+            'allow_half_day': p.allow_half_day,
+            'working_days_per_month': p.working_days_per_month,
+        } for p in policies])
+
+
+class LeavePolicyDetailView(generics.RetrieveUpdateAPIView):
+    permission_classes = [IsAuthenticated]
+    queryset = LeavePolicy.objects.all()
+
+    def retrieve(self, request, *args, **kwargs):
+        p = self.get_object()
+        return Response({
+            'id': p.id, 'role': p.role, 'leave_type': p.leave_type,
+            'annual_quota_days': float(p.annual_quota_days),
+            'allow_half_day': p.allow_half_day,
+            'working_days_per_month': p.working_days_per_month,
+        })
+
+    def partial_update(self, request, *args, **kwargs):
+        try:
+            if request.user.role.role != 'admin':
+                return Response({'error': 'Admin only'}, status=403)
+        except Exception:
+            return Response({'error': 'Admin only'}, status=403)
+        p = self.get_object()
+        for field in ['annual_quota_days', 'allow_half_day', 'working_days_per_month']:
+            if field in request.data:
+                setattr(p, field, request.data[field])
+        p.save()
+        return Response({'status': 'updated'})
+
+
+# ============================================================================
+# Feature #16: User Profile (avatar, theme, settings)
+# ============================================================================
+
+class UserProfileMeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        role_info = {}
+        try:
+            r = user.role
+            role_info = {
+                'role': r.role,
+                'role_display': r.get_role_display(),
+                'assigned_at': r.assigned_at,
+                'password_changed': r.password_changed,
+            }
+        except Exception:
+            pass
+
+        avatar_url = None
+        if profile.profile_image:
+            avatar_url = request.build_absolute_uri(profile.profile_image.url)
+
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'email': user.email,
+            'role_info': role_info,
+            'profile': {
+                'theme_preference': profile.theme_preference,
+                'phone': profile.phone,
+                'bio': profile.bio,
+                'timezone': profile.timezone,
+                'locale': profile.locale,
+                'preferences': profile.preferences,
+                'profile_image_url': avatar_url,
+                'updated_at': profile.updated_at,
+            },
+        })
+
+    def patch(self, request):
+        user = request.user
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        allowed = ['theme_preference', 'phone', 'bio', 'timezone', 'locale', 'preferences']
+        for field in allowed:
+            if field in request.data:
+                setattr(profile, field, request.data[field])
+        profile.save()
+
+        # Also update name if provided
+        if 'first_name' in request.data:
+            user.first_name = request.data['first_name']
+        if 'last_name' in request.data:
+            user.last_name = request.data['last_name']
+        user.save(update_fields=['first_name', 'last_name'])
+
+        return Response({'status': 'updated'})
+
+
+class UserAvatarUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        from rest_framework.parsers import MultiPartParser, FormParser
+        file = request.FILES.get('avatar')
+        if not file:
+            return Response({'error': 'avatar file required'}, status=400)
+        if file.size > 2 * 1024 * 1024:
+            return Response({'error': 'File too large (max 2MB)'}, status=400)
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp']
+        if file.content_type not in allowed_types:
+            return Response({'error': 'Only JPEG, PNG, or WebP images allowed'}, status=400)
+
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        if profile.profile_image:
+            try:
+                profile.profile_image.delete(save=False)
+            except Exception:
+                pass
+
+        import os
+        ext = os.path.splitext(file.name)[1].lower() or '.jpg'
+        profile.profile_image.save(f'avatar_{request.user.id}{ext}', file, save=True)
+
+        return Response({
+            'profile_image_url': request.build_absolute_uri(profile.profile_image.url)
         })
 

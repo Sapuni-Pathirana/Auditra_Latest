@@ -302,10 +302,10 @@ export default function LoginPage() {
           <Stack spacing={2.5}>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 600, color: '#0F172A', mb: 0.8, fontSize: '0.85rem' }}>
-                Username
+                Username or Email
               </Typography>
               <TextField
-                fullWidth placeholder="Enter your username" value={username}
+                fullWidth placeholder="Enter your username or email" value={username}
                 onChange={(e) => setUsername(e.target.value)} required autoFocus
                 variant="outlined" size="medium" sx={inputSx}
               />

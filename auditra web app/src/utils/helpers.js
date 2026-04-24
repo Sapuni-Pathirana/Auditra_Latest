@@ -22,16 +22,27 @@ export const getStatusColor = (status) => {
 
 export const getPriorityColor = (priority) => {
   const colors = {
-    high: '#0D47A1',
-    medium: '#1E88E5',
-    low: '#1565C0',
+    urgent: '#6A1B9A',  // deep purple
+    high: '#d32f2f',    // red
+    medium: '#ed6c02',  // orange
+    low: '#2e7d32',     // green
   };
   return colors[priority] || '#64748B';
 };
 
+export const getPriorityBgColor = (priority) => {
+  const colors = {
+    urgent: '#f3e5f5',
+    high: '#fdecea',
+    medium: '#fff3e0',
+    low: '#e8f5e9',
+  };
+  return colors[priority] || '#f5f5f5';
+};
+
 export const capitalize = (str) => {
   if (!str) return '';
-  return str.toUpperCase();
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 };
 
 export const formatDate = (dateString) => {

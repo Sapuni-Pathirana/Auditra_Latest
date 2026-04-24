@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Box, TextField, Button, Typography, Alert, Grid, Container, Paper, Divider,
@@ -90,6 +90,14 @@ const TypeCard = ({ icon: Icon, title, description, onClick }) => (
   </Box>
 );
 
+async function checkEmail(email, intent) {
+  if (!email || !email.includes('@')) return null;
+  try {
+    const res = await axiosClient.get('/auth/public/check-email/', { params: { email, intent } });
+    return res.data;
+  } catch { return null; }
+}
+
 export default function ClientFormPage() {
   const [regType, setRegType] = useState(null); // null | 'direct' | 'agent'
   const [form, setForm] = useState({
@@ -100,8 +108,25 @@ export default function ClientFormPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailErrors, setEmailErrors] = useState({});
+  const debounceRef = useRef({});
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  const validateEmailField = useCallback((fieldName, value, intent) => {
+    clearTimeout(debounceRef.current[fieldName]);
+    debounceRef.current[fieldName] = setTimeout(async () => {
+      const result = await checkEmail(value, intent);
+      if (!result) return;
+      if (result.conflict) {
+        setEmailErrors((prev) => ({ ...prev, [fieldName]: `This email is already registered with a different role (${intent}).` }));
+      } else if (result.exists && !result.conflict) {
+        setEmailErrors((prev) => ({ ...prev, [fieldName]: 'This email is already registered.' }));
+      } else {
+        setEmailErrors((prev) => { const n = { ...prev }; delete n[fieldName]; return n; });
+      }
+    }, 400);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -319,7 +344,16 @@ export default function ClientFormPage() {
                   <Grid item xs={12}><TextField fullWidth label="Address" name="address" value={form.address} onChange={handleChange} sx={inputSx} /></Grid>
                   <Grid item xs={12} sm={6}><TextField fullWidth label="Phone" name="phone" value={form.phone} onChange={handleChange} sx={inputSx} /></Grid>
                   <Grid item xs={12} sm={6}><TextField fullWidth label="NIC" name="nic" value={form.nic} onChange={handleChange} sx={inputSx} /></Grid>
-                  <Grid item xs={12}><TextField fullWidth label="Email" name="email" type="email" value={form.email} onChange={handleChange} required sx={inputSx} /></Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth label="Email" name="email" type="email" value={form.email}
+                      onChange={(e) => { handleChange(e); setEmailErrors((prev) => { const n = { ...prev }; delete n.email; return n; }); }}
+                      onBlur={(e) => validateEmailField('email', e.target.value, 'client')}
+                      required sx={inputSx}
+                      error={!!emailErrors.email}
+                      helperText={emailErrors.email || ''}
+                    />
+                  </Grid>
                   <Grid item xs={12}><TextField fullWidth label="Company Name" name="company_name" value={form.company_name} onChange={handleChange} sx={inputSx} /></Grid>
                 </Grid>
               </Box>
@@ -344,7 +378,16 @@ export default function ClientFormPage() {
                     <Grid container spacing={2.5}>
                       <Grid item xs={12}><TextField fullWidth label="Agent Name" name="agent_name" value={form.agent_name} onChange={handleChange} required sx={inputSx} /></Grid>
                       <Grid item xs={12} sm={6}><TextField fullWidth label="Agent Phone" name="agent_phone" value={form.agent_phone} onChange={handleChange} required sx={inputSx} /></Grid>
-                      <Grid item xs={12} sm={6}><TextField fullWidth label="Agent Email" name="agent_email" type="email" value={form.agent_email} onChange={handleChange} required sx={inputSx} /></Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth label="Agent Email" name="agent_email" type="email" value={form.agent_email}
+                          onChange={(e) => { handleChange(e); setEmailErrors((prev) => { const n = { ...prev }; delete n.agent_email; return n; }); }}
+                          onBlur={(e) => validateEmailField('agent_email', e.target.value, 'agent')}
+                          required sx={inputSx}
+                          error={!!emailErrors.agent_email}
+                          helperText={emailErrors.agent_email || ''}
+                        />
+                      </Grid>
                     </Grid>
                   </Box>
                 </>

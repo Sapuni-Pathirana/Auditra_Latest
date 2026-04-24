@@ -49,5 +49,10 @@ urlpatterns = [
     path('<int:project_id>/generate-commission-report/', views.GenerateCommissionReportView.as_view(), name='generate-commission-report'),
     path('commission-reports/<int:report_id>/send/', views.SendCommissionReportView.as_view(), name='send-commission-report'),
     path('agent-commission-reports/', views.AgentCommissionReportsView.as_view(), name='agent-commission-reports'),
+    # Visit scheduling (Feature #2)
+    path('<int:project_id>/visits/', views.ProjectVisitListCreateView.as_view(), name='project-visits'),
+    path('visits/<int:pk>/', views.ProjectVisitDetailView.as_view(), name='project-visit-detail'),
+    # Public email role check (Feature #7)
+    path('public/check-email/', views.PublicCheckEmailView.as_view(), name='public-check-email'),
 ]
 

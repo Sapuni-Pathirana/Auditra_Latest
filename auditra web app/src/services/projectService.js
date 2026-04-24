@@ -48,9 +48,14 @@ const projectService = {
 
   uploadDocument: (data) => {
     const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
+    const { visible_to_ids, ...rest } = data;
+    Object.entries(rest).forEach(([key, value]) => {
       if (value != null) formData.append(key, value);
     });
+    // Feature #11: append visibility list
+    if (visible_to_ids && visible_to_ids.length > 0) {
+      visible_to_ids.forEach((uid) => formData.append('visible_to_ids', uid));
+    }
     return axiosClient.post('/projects/documents/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

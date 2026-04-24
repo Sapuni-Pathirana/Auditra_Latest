@@ -120,7 +120,7 @@ class Valuation(models.Model):
 
 
 class ValuationPhoto(models.Model):
-    """Photos attached to valuations"""
+    """Photos attached to valuations — with metadata, ordering, and primary-photo support."""
     
     valuation = models.ForeignKey(
         Valuation,
@@ -130,41 +130,24 @@ class ValuationPhoto(models.Model):
     photo = models.ImageField(upload_to='valuation_photos/%Y/%m/%d/')
     caption = models.CharField(max_length=200, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    # Feature #9: metadata
+    is_primary = models.BooleanField(default=False)
+    ordering = models.PositiveIntegerField(default=0)
+    captured_at = models.DateTimeField(null=True, blank=True)
+    gps_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    gps_lon = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    device_id = models.CharField(max_length=200, blank=True)
     
     class Meta:
         db_table = 'valuation_photos'
         verbose_name = 'Valuation Photo'
         verbose_name_plural = 'Valuation Photos'
-        ordering = ['-uploaded_at']
+        ordering = ['ordering', '-uploaded_at']
     
     def __str__(self):
         return f"Photo for {self.valuation}"
 
-
-class Notification(models.Model):
-    """In-app notifications for valuation workflow events"""
-
-    NOTIFICATION_TYPES = [
-        ('rejection', 'Rejection'),
-        ('approval', 'Approval'),
-        ('submission', 'Submission'),
-    ]
-
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
-    title = models.CharField(max_length=255)
-    message = models.TextField()
-    notification_type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES, default='rejection')
-    is_read = models.BooleanField(default=False)
-    valuation = models.ForeignKey(Valuation, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'notifications'
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.title} - {self.user.username}"
 
 
 class ValuationHistory(models.Model):

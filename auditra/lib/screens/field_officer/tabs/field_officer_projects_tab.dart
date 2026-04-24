@@ -235,7 +235,9 @@ class _FieldOfficerProjectsTabState extends State<FieldOfficerProjectsTab> {
                                   project: project,
                                   onViewDetails: widget.onViewDetails,
                                   onViewReports: widget.onViewReports,
+                                  onCreateReport: (_) {},
                                   onSubmit: widget.onSubmit,
+                                  onScheduleVisit: null,
                                 );
                               },
                             ),

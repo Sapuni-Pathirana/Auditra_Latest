@@ -15,7 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Project, ProjectDocument, ProjectStatusHistory, ProjectPayment, ProjectCancellationRequest, CommissionReport
+from .models import Project, ProjectDocument, ProjectStatusHistory, ProjectPayment, ProjectCancellationRequest, CommissionReport, ProjectVisit
 from .serializers import (
     ProjectSerializer,
     ProjectCreateSerializer,
@@ -203,7 +203,7 @@ class ProjectListView(generics.ListCreateAPIView):
             'coordinator', 'assigned_field_officer', 'assigned_client',
             'assigned_agent', 'assigned_accessor', 'assigned_senior_valuer'
         ).prefetch_related(
-            'documents', 'valuations__field_officer', 'valuations__photos', 'history'
+            'documents', 'valuations__field_officer', 'valuations__photos', 'history', 'visits'
         )
     
     def perform_create(self, serializer):
@@ -300,6 +300,35 @@ class ProjectListView(generics.ListCreateAPIView):
         except Exception:
             pass
 
+        try:
+            from notifications.services import notify
+            from django.contrib.auth import get_user_model as _get_user_model
+            _User = _get_user_model()
+            action_url = f'/dashboard/projects/{project.id}'
+            # Notify coordinator (themselves) that the project is now active
+            notify(
+                user=project.coordinator,
+                category='project',
+                severity='info',
+                title='New Project Created',
+                message=f'Project "{project.title}" has been created and assigned to you.',
+                meta={'project_id': project.id},
+                action_url=action_url,
+            )
+            # Notify all admins
+            for admin in _User.objects.filter(role__role='admin', is_active=True):
+                notify(
+                    user=admin,
+                    category='project',
+                    severity='info',
+                    title='New Project Created',
+                    message=f'Project "{project.title}" was created by coordinator {project.coordinator.get_full_name() or project.coordinator.username}.',
+                    meta={'project_id': project.id},
+                    action_url=action_url,
+                )
+        except Exception:
+            pass
+
         # If created from a client submission, update submission status and mark project_created
         submission_id = self.request.data.get('submission_id', None)
         if submission_id:
@@ -367,7 +396,7 @@ class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
             'coordinator', 'assigned_field_officer', 'assigned_client',
             'assigned_agent', 'assigned_accessor', 'assigned_senior_valuer'
         ).prefetch_related(
-            'documents', 'valuations__field_officer', 'valuations__photos', 'history'
+            'documents', 'valuations__field_officer', 'valuations__photos', 'history', 'visits'
         )
 
     def perform_update(self, serializer):
@@ -411,7 +440,9 @@ class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
                     "Cannot start project: Senior valuer must be assigned before starting."
                 )
 
-        if new_status != project.status:
+        status_changed = new_status != project.status
+        old_status = project.status
+        if status_changed:
             ProjectStatusHistory.objects.create(
                 project=project,
                 status=new_status,
@@ -424,7 +455,7 @@ class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
         try:
             from system_logs.utils import log_action, get_client_ip
             description = f"Project updated: {project.title} (ID: {project.id})"
-            if new_status != project.status:
+            if status_changed:
                 description = f"Project status changed to {dict(Project.STATUS_CHOICES).get(new_status, new_status)}: {project.title}"
             log_action(
                 action='PROJECT_UPDATED',
@@ -436,6 +467,40 @@ class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
             )
         except Exception:
             pass
+
+        # Feature #3 (C1): fan-out notifications to stakeholders on status change.
+        if status_changed:
+            try:
+                from notifications.services import notify
+                old_label = dict(Project.STATUS_CHOICES).get(old_status, old_status)
+                new_label = dict(Project.STATUS_CHOICES).get(new_status, new_status)
+                title = f'Project status: {project.title}'
+                msg = f'Status changed from {old_label} to {new_label}.'
+                meta = {
+                    'project_id': project.id,
+                    'old_status': old_status,
+                    'new_status': new_status,
+                }
+                recipients = {
+                    project.coordinator,
+                    project.assigned_field_officer,
+                    project.assigned_client,
+                    project.assigned_agent,
+                    project.assigned_accessor,
+                    project.assigned_senior_valuer,
+                }
+                recipients.discard(self.request.user)
+                recipients.discard(None)
+                severity = 'success' if new_status == 'completed' else 'info'
+                for u in recipients:
+                    notify(
+                        user=u, category='project', severity=severity,
+                        title=title, message=msg, meta=meta,
+                        action_url=f'/dashboard/projects/{project.id}',
+                        email_subject=title,
+                    )
+            except Exception:
+                pass
 
 
 class AssignFieldOfficerView(APIView):
@@ -484,6 +549,20 @@ class AssignFieldOfficerView(APIView):
                 category='project',
                 ip_address=get_client_ip(request),
                 metadata={'project_id': project.id, 'field_officer_id': field_officer.id},
+            )
+        except Exception:
+            pass
+
+        try:
+            from notifications.services import notify
+            notify(
+                user=field_officer,
+                category='project',
+                severity='info',
+                title='You Have Been Assigned to a Project',
+                message=f'You have been assigned as Field Officer for project "{project.title}". Please review the project details.',
+                meta={'project_id': project.id},
+                action_url=f'/dashboard/projects/{project.id}',
             )
         except Exception:
             pass
@@ -944,11 +1023,17 @@ class ProjectDocumentView(generics.CreateAPIView):
             except User.DoesNotExist:
                 raise serializers.ValidationError("Assigned user not found.")
         
-        serializer.save(
+        doc = serializer.save(
             project=project,
             uploaded_by=self.request.user,
-            assigned_to=assigned_to
+            assigned_to=assigned_to,
         )
+
+        # Feature #11: set visible_to M2M (accept both 'visible_to' and 'visible_to_ids')
+        visible_to_ids = self.request.data.getlist('visible_to_ids', []) or self.request.data.getlist('visible_to', [])
+        if visible_to_ids:
+            valid_users = User.objects.filter(id__in=visible_to_ids)
+            doc.visible_to.set(valid_users)
 
         try:
             from system_logs.utils import log_action, get_client_ip
@@ -960,6 +1045,36 @@ class ProjectDocumentView(generics.CreateAPIView):
                 ip_address=get_client_ip(self.request),
                 metadata={'project_id': project.id, 'project_title': project.title},
             )
+        except Exception:
+            pass
+
+        # Feature #3 (C1): notify recipients of a new document.
+        try:
+            from notifications.services import notify
+            doc_title = getattr(doc, 'title', None) or 'Document'
+            title = f'New document on {project.title}'
+            msg = f'"{doc_title}" was uploaded by {self.request.user.get_full_name() or self.request.user.username}.'
+            meta = {'project_id': project.id, 'document_id': doc.id}
+            if visible_to_ids:
+                recipients = list(User.objects.filter(id__in=visible_to_ids))
+            else:
+                recipients = [u for u in [
+                    project.coordinator,
+                    project.assigned_field_officer,
+                    project.assigned_accessor,
+                    project.assigned_senior_valuer,
+                ] if u is not None]
+            seen = set()
+            for u in recipients:
+                if u is None or u.id in seen or u == self.request.user:
+                    continue
+                seen.add(u.id)
+                notify(
+                    user=u, category='document', severity='info',
+                    title=title, message=msg, meta=meta,
+                    action_url=f'/dashboard/projects/{project.id}',
+                    email_subject=title,
+                )
         except Exception:
             pass
 
@@ -995,6 +1110,20 @@ class ProjectDocumentDeleteView(generics.DestroyAPIView):
                 ip_address=get_client_ip(self.request),
                 metadata={'project_id': project.id, 'document': doc_name},
             )
+        except Exception:
+            pass
+
+        # Feature #3 (C1): tell the coordinator when someone else deletes a document.
+        try:
+            from notifications.services import notify
+            if project.coordinator and project.coordinator != self.request.user:
+                notify(
+                    user=project.coordinator, category='document', severity='warning',
+                    title=f'Document removed from {project.title}',
+                    message=f'"{doc_name}" was deleted by {self.request.user.get_full_name() or self.request.user.username}.',
+                    meta={'project_id': project.id, 'document': doc_name},
+                    action_url=f'/dashboard/projects/{project.id}',
+                )
         except Exception:
             pass
 
@@ -1522,6 +1651,21 @@ class UploadBankSlipView(APIView):
         except Exception:
             pass
 
+        # Feature #3 (C1): notify coordinator that a bank slip is awaiting review.
+        try:
+            from notifications.services import notify
+            if project.coordinator:
+                notify(
+                    user=project.coordinator, category='payment', severity='info',
+                    title=f'Bank slip submitted — {project.title}',
+                    message=f'{request.user.get_full_name() or request.user.username} uploaded a bank slip. Review required.',
+                    meta={'project_id': project.id, 'payment_id': payment.id},
+                    action_url=f'/dashboard/projects/{project.id}',
+                    email_subject=f'Bank slip awaiting review — {project.title}',
+                )
+        except Exception:
+            pass
+
         return Response({
             'success': True,
             'message': 'Bank slip uploaded successfully. Awaiting coordinator review.',
@@ -1600,6 +1744,21 @@ class ApprovePaymentView(APIView):
                 ip_address=get_client_ip(request),
                 metadata={'project_id': project.id},
             )
+        except Exception:
+            pass
+
+        # Feature #3 (C1): notify client that payment was approved.
+        try:
+            from notifications.services import notify
+            if project.assigned_client:
+                notify(
+                    user=project.assigned_client, category='payment', severity='success',
+                    title=f'Payment approved — {project.title}',
+                    message='Your payment has been approved. The project will now proceed.',
+                    meta={'project_id': project.id, 'payment_id': payment.id},
+                    action_url=f'/dashboard/projects/{project.id}',
+                    email_subject=f'Payment approved — {project.title}',
+                )
         except Exception:
             pass
 
@@ -1684,6 +1843,21 @@ class RejectPaymentView(APIView):
                 ip_address=get_client_ip(request),
                 metadata={'project_id': project.id, 'reason': rejection_reason},
             )
+        except Exception:
+            pass
+
+        # Feature #3 (C1): notify client that payment was rejected.
+        try:
+            from notifications.services import notify
+            if project.assigned_client:
+                notify(
+                    user=project.assigned_client, category='payment', severity='warning',
+                    title=f'Payment rejected — {project.title}',
+                    message=f'Your bank slip was rejected. Reason: {rejection_reason}',
+                    meta={'project_id': project.id, 'payment_id': payment.id, 'reason': rejection_reason},
+                    action_url=f'/dashboard/projects/{project.id}',
+                    email_subject=f'Payment rejected — {project.title}',
+                )
         except Exception:
             pass
 
@@ -2813,3 +2987,125 @@ class AgentCommissionReportsView(APIView):
         return Response({
             'reports': serializer.data
         }, status=status.HTTP_200_OK)
+
+
+# ============================================================================
+# Feature #2: Project Visit Scheduling
+# ============================================================================
+
+from rest_framework.throttling import AnonRateThrottle
+
+
+class ProjectVisitSerializer(generics.GenericAPIView):
+    pass
+
+
+from rest_framework import serializers as drf_serializers
+
+
+class ProjectVisitModelSerializer(drf_serializers.ModelSerializer):
+    field_officer_name = drf_serializers.SerializerMethodField()
+    # Accept both 'note' and 'notes' from clients (mobile uses 'notes')
+    notes = drf_serializers.CharField(source='note', required=False, allow_blank=True, allow_null=True)
+
+    class Meta:
+        model = ProjectVisit
+        fields = ['id', 'project', 'field_officer', 'field_officer_name', 'scheduled_date', 'note', 'notes', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'field_officer', 'field_officer_name', 'created_at', 'updated_at']
+
+    def get_field_officer_name(self, obj):
+        return obj.field_officer.get_full_name() or obj.field_officer.username
+
+
+class ProjectVisitListCreateView(generics.ListCreateAPIView):
+    serializer_class = ProjectVisitModelSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ProjectVisit.objects.filter(project_id=self.kwargs['project_id'])
+
+    def perform_create(self, serializer):
+        from django.utils import timezone as tz
+        project = get_object_or_404(Project, pk=self.kwargs['project_id'])
+        user = self.request.user
+        role = get_user_role(user)
+        if role != 'field_officer':
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Only field officers can schedule visits.')
+        if project.assigned_field_officer != user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('You are not assigned to this project.')
+
+        visit = serializer.save(project=project, field_officer=user)
+
+        # Notify client, agent, coordinator
+        from notifications.services import notify
+        fo_name = user.get_full_name() or user.username
+        msg = f'Field Officer {fo_name} is scheduled to visit on {visit.scheduled_date} for project "{project.title}".'
+        meta = {'project_id': project.id, 'visit_id': visit.id}
+        for u in [project.assigned_client, project.assigned_agent, project.coordinator]:
+            if u:
+                notify(user=u, category='visit', severity='info',
+                       title='Site Visit Scheduled', message=msg,
+                       meta=meta, action_url=f'/dashboard/projects/{project.id}',
+                       email_subject=f'Site Visit Scheduled — {project.title}')
+
+
+class ProjectVisitDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = ProjectVisitModelSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = ProjectVisit.objects.all()
+
+    def perform_update(self, serializer):
+        visit = serializer.save()
+        project = visit.project
+        from notifications.services import notify
+        fo_name = visit.field_officer.get_full_name() or visit.field_officer.username
+        msg = f'Site visit for project "{project.title}" has been updated. New date: {visit.scheduled_date}.'
+        meta = {'project_id': project.id, 'visit_id': visit.id}
+        for u in [project.assigned_client, project.assigned_agent, project.coordinator]:
+            if u:
+                notify(user=u, category='visit', severity='info',
+                       title='Site Visit Updated', message=msg,
+                       meta=meta, action_url=f'/dashboard/projects/{project.id}',
+                       email_subject=f'Site Visit Updated — {project.title}')
+
+
+# ============================================================================
+# Feature #7: Public email/role check (rate-throttled)
+# ============================================================================
+
+class PublicEmailCheckThrottle(AnonRateThrottle):
+    rate = '20/min'
+
+
+class PublicCheckEmailView(APIView):
+    """
+    Public endpoint for landing-page forms to check if an email already
+    exists in the system with a different role than intended.
+    Returns only boolean flags (no PII).
+    """
+    permission_classes = []
+    throttle_classes = [PublicEmailCheckThrottle]
+
+    def get(self, request):
+        email = request.query_params.get('email', '').strip().lower()
+        intent = request.query_params.get('intent', '').strip()
+
+        if not email or not intent:
+            return Response({'error': 'email and intent required'}, status=400)
+
+        from django.contrib.auth.models import User
+        from authentication.models import UserRole
+
+        try:
+            user = User.objects.get(email__iexact=email)
+            try:
+                existing_role = user.role.role
+            except Exception:
+                existing_role = 'unassigned'
+
+            conflict = existing_role not in ('unassigned',) and existing_role != intent
+            return Response({'exists': True, 'conflict': conflict})
+        except User.DoesNotExist:
+            return Response({'exists': False, 'conflict': False})

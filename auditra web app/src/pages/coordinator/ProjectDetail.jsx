@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Card, CardContent, Grid, Chip, Button, Alert,
   Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
   Divider, IconButton, Tooltip, FormControl, InputLabel, TextField,
-  LinearProgress
+  LinearProgress, OutlinedInput, Checkbox, ListItemText,
 } from '@mui/material';
 import {
   ArrowBack, PersonAdd, PlayArrow, CheckCircle, Cancel, Lock, Edit,
@@ -60,6 +60,9 @@ export default function ProjectDetail() {
   // Document management states
   const [docUploading, setDocUploading] = useState(false);
   const [deletingDocId, setDeletingDocId] = useState(null);
+  const [docVisibilityDialog, setDocVisibilityDialog] = useState({ open: false, file: null });
+  const [docVisibleTo, setDocVisibleTo] = useState([]);
+  const docFileRef = useRef(null);
 
   // Admin approval request state
   const [approvalRequestLoading, setApprovalRequestLoading] = useState(false);
@@ -309,27 +312,35 @@ export default function ProjectDetail() {
     }
   };
 
-  // Document handlers
-  const handleDocumentUpload = async (e) => {
+  // Document handlers – show visibility picker first
+  const handleDocumentFileSelected = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
+    setDocVisibilityDialog({ open: true, file: files[0] });
+    setDocVisibleTo([]);
+    e.target.value = '';
+  };
+
+  const handleDocumentUpload = async () => {
+    const file = docVisibilityDialog.file;
+    if (!file) return;
+    setDocVisibilityDialog({ open: false, file: null });
     setDocUploading(true);
     setError('');
-    for (const file of files) {
-      try {
-        await projectService.uploadDocument({
-          project: id,
-          file,
-          name: file.name.replace(/\.[^/.]+$/, ''),
-        });
-      } catch {
-        setError(`Failed to upload ${file.name}`);
-      }
+    try {
+      await projectService.uploadDocument({
+        project: id,
+        file,
+        name: file.name.replace(/\.[^/.]+$/, ''),
+        visible_to_ids: docVisibleTo,
+      });
+      await fetchProject();
+      setSuccess('Document uploaded successfully');
+    } catch {
+      setError(`Failed to upload ${file.name}`);
+    } finally {
+      setDocUploading(false);
     }
-    e.target.value = '';
-    await fetchProject();
-    setDocUploading(false);
-    setSuccess('Document(s) uploaded successfully');
   };
 
   const handleDeleteDocument = async (docId) => {
@@ -496,6 +507,13 @@ export default function ProjectDetail() {
             </Box>
             {isCoordinator && (
               <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate(`/dashboard/projects/${id}/standups`)}
+                  sx={{ fontWeight: 600 }}
+                >
+                  Standups
+                </Button>
                 {project.status !== 'cancelled' && (
                   <Button
                     variant="outlined"
@@ -1030,7 +1048,7 @@ export default function ProjectDetail() {
                 disabled={docUploading}
               >
                 {docUploading ? 'Uploading...' : 'Upload Document'}
-                <input type="file" hidden multiple onChange={handleDocumentUpload} />
+                <input type="file" hidden ref={docFileRef} onChange={handleDocumentFileSelected} />
               </Button>
             )}
           </Box>
@@ -1418,6 +1436,44 @@ export default function ProjectDetail() {
           <Button onClick={() => { setReportDialog(false); setGeneratedReport(null); }}>
             Close
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Document Visibility Dialog (Feature #11) */}
+      <Dialog open={docVisibilityDialog.open} onClose={() => setDocVisibilityDialog({ open: false, file: null })} maxWidth="sm" fullWidth>
+        <DialogTitle>Document Visibility</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Select which team members can view this document. Leave empty to allow all members to view it.
+          </Typography>
+          <FormControl fullWidth>
+            <InputLabel>Visible To</InputLabel>
+            <Select
+              multiple
+              value={docVisibleTo}
+              onChange={(e) => setDocVisibleTo(e.target.value)}
+              input={<OutlinedInput label="Visible To" />}
+              renderValue={(selected) => selected.map(uid => {
+                const member = (project?.assignees || []).find(a => a.user?.id === uid || a.id === uid);
+                return member?.user?.full_name || member?.full_name || uid;
+              }).join(', ')}
+            >
+              {(project?.assignees || []).map((a) => {
+                const userId = a.user?.id ?? a.id;
+                const name = a.user?.full_name ?? a.full_name ?? a.user?.username ?? 'Unknown';
+                return (
+                  <MenuItem key={userId} value={userId}>
+                    <Checkbox checked={docVisibleTo.includes(userId)} />
+                    <ListItemText primary={name} secondary={a.role ?? ''} />
+                  </MenuItem>
+                );
+              })}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDocVisibilityDialog({ open: false, file: null })}>Cancel</Button>
+          <Button variant="contained" onClick={handleDocumentUpload}>Upload</Button>
         </DialogActions>
       </Dialog>
     </Box>

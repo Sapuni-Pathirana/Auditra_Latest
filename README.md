@@ -13,13 +13,14 @@ Auditra/
 
 ### Tech Stack
 
-| Layer      | Technology                                      |
-|------------|------------------------------------------------|
-| Backend    | Django 5.0, Django REST Framework, PostgreSQL  |
-| Auth       | JWT (SimpleJWT), role-based access control     |
-| Web App    | React 18, Vite, Material-UI 6, Recharts       |
-| Mobile App | Flutter 3.10+, Provider, HTTP                  |
-| Email      | SendGrid                                       |
+| Layer      | Technology                                                           |
+|------------|----------------------------------------------------------------------|
+| Backend    | Django 5.0, DRF, PostgreSQL, Django Channels (WebSockets), Celery   |
+| Auth       | JWT (SimpleJWT), role-based access control                           |
+| Real-time  | Redis, Django Channels, Firebase Cloud Messaging (FCM)              |
+| Web App    | React 18, Vite, Material-UI 6, Recharts                             |
+| Mobile App | Flutter 3.10+, Provider, Hive, web_socket_channel                   |
+| Email      | SendGrid                                                             |
 
 ## User Roles
 
@@ -40,6 +41,99 @@ Field Officers use the **mobile app** for project work (site visits, valuations,
 
 All other roles use the **web app** exclusively.
 
+## New Features (Feature Expansion)
+
+### 1. Daily Standups Chat
+- Per-project chat room (backend: `standups` Django app)
+- Work-to-do / work-done message templates
+- @mention available team members by name and role
+- Real-time delivery via WebSocket
+
+### 2. Field Officer Visit Scheduling
+- FO can schedule a site visit date from mobile
+- Client/agent/coordinator are notified via email + in-app notification
+- Celery Beat sends daily reminders until the visit date
+
+### 3. Unified Notifications
+- Central `notifications` Django app with `notify()` service
+- In-app WebSocket delivery (web) and FCM push (mobile)
+- Role-based, personalized, categorized notifications
+- Dedicated Notifications page on web and mobile
+
+### 4. Mobile Offline Sync & Bug Fixes
+- `SyncEngine.init()` called at app startup
+- Sync statuses: **Queued → Syncing → Synced / Failed**
+- Auto sync on network restore via connectivity_plus
+- `password_change_required` properly propagated from login response
+- Global Flutter error handler (`ErrorReporter`)
+
+### 5. Admin Dashboard KPIs
+- Projects completed within deadlines (per employee, per month)
+- Average jobs completed per employee and time taken
+- New clients engaged monthly
+- Overall project status (by month, quarter, year) — bar & line charts
+
+### 6. Invitation Tracking
+- `Invitation` model auto-created when client/agent/employee accounts are generated
+- First-login forced password change gate
+- Admin Invitations tab (`/dashboard/invitations`)
+
+### 7. Landing Page Email Validation
+- Public `/auth/public/check-email/` endpoint (rate-limited)
+- Debounced real-time check on Client and Employee registration forms
+- Error shown if email already used for a different role
+
+### 8. Priority Color Tags
+- `getPriorityColor` / `getPriorityBgColor` in `helpers.js`
+- `AppColors.priorityColor()` / `priorityBgColor()` in Flutter theme
+- High=Red, Medium=Orange, Low=Green
+
+### 9. Mobile Report Metadata & Photo Management
+- Auto-capture timestamp, GPS coordinates, device ID on each valuation
+- Image compression via `flutter_image_compress` before upload
+- Mark primary photo; drag-to-reorder API on backend
+
+### 10. Similar Item Suggestions
+- Backend: `catalog` Django app with `ItemCatalog`, pluggable providers
+- Mobile: `ItemSuggestionsWidget` — shows suggestions with confidence scores
+- FO can confirm, edit, reject or create new item manually
+
+### 11. Document Visibility
+- `ProjectDocument.visible_to` ManyToMany field
+- Coordinator selects viewers when uploading (multi-select dialog)
+- Backend queryset filters documents by visible_to list
+
+### 12. Depreciation Calculation (Mobile)
+- Straight-line, diminishing balance, units-of-production methods
+- Default rates from `DepreciationPolicy` system tables
+- Override with reason option
+- `DepreciationWidget` embedded in valuation form
+
+### 13. One Combined Report Per Project
+- `reports` Django app: `ProjectReport`, `ValuationItem`, `ValuationItemPhoto`
+- Duplicate item detection (merge or create new)
+- Server-side combined PDF via ReportLab
+- Conflict resolution: 409 response + optimistic locking on PUT
+
+### 14. Offline-First Sync
+- Sync status labels: Queued (0), Syncing (2), Synced (1), Failed (3)
+- `SyncStatusWidget` visible on dashboard
+- Auto background sync on network reconnect
+- `updateValuationSyncStatus()` tracks per-item state
+
+### 15. Leave Management Enhancements
+- Half-day leave requests (morning/afternoon)
+- `LeavePolicy` + `LeaveBalance` models for quota tracking
+- Salary deduction automatically flagged on `PaymentSlip` for excess leave
+- Employee can cancel approved leave before start date → HR notified
+
+### 16. User Profile
+- `UserProfile` model (avatar, theme, bio, phone, timezone)
+- Full Profile page on web and mobile
+- Theme toggle (light/dark/system) persisted server-side and in SharedPreferences
+- `UserAvatar` component used system-wide on web
+- Profile icon in mobile app bar for all roles
+
 ## Getting Started
 
 ### Prerequisites
@@ -47,11 +141,10 @@ All other roles use the **web app** exclusively.
 - Python 3.10+
 - Node.js 18+
 - PostgreSQL 14+
+- Redis 6+ (for WebSocket channels + Celery)
 - Flutter SDK 3.10+ (for mobile development)
 
 ### 1. Database Setup
-
-Create a PostgreSQL database:
 
 ```sql
 CREATE DATABASE auditra_db;
@@ -70,17 +163,21 @@ venv\Scripts\activate        # Windows
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure environment
-# Create a .env file in backend/ with your DB credentials (see Environment Variables below)
-
+# Configure environment (see Environment Variables)
 # Run migrations
 python manage.py migrate
 
-
 # Create admin user
 python manage.py createsuperuser
-# Start server
-python manage.py runserver
+
+# Start ASGI server (Channels / WebSocket support)
+daphne auditra_backend.asgi:application
+
+# Start Celery worker (background tasks)
+celery -A auditra_backend worker -l info
+
+# Start Celery Beat scheduler (reminders)
+celery -A auditra_backend beat -l info
 ```
 
 The API will be available at `http://localhost:8000/api/`.
@@ -89,11 +186,7 @@ The API will be available at `http://localhost:8000/api/`.
 
 ```bash
 cd "auditra web app"
-
-# Install dependencies
 npm install
-
-# Start dev server
 npm run dev
 ```
 
@@ -103,11 +196,7 @@ The web app will be available at `http://localhost:5173/`.
 
 ```bash
 cd auditra
-
-# Get dependencies
 flutter pub get
-
-# Run on device/emulator
 flutter run
 ```
 
@@ -130,160 +219,114 @@ DEBUG=True
 # Email (SendGrid)
 SENDGRID_API_KEY=your-sendgrid-api-key
 DEFAULT_FROM_EMAIL=your-email@example.com
+FRONTEND_URL=http://localhost:5173
+
+# Redis (Channels + Celery)
+REDIS_URL=redis://localhost:6379/0
+
+# Firebase (FCM push notifications)
+FCM_CREDENTIALS_PATH=/path/to/firebase-credentials.json
 ```
 
-## API Endpoints
+## Django Apps
 
-### Authentication (`/api/auth/`)
+| App                 | Purpose                                                       |
+|---------------------|---------------------------------------------------------------|
+| `authentication`    | Users, roles, leave, payments, removals, invitations, profile |
+| `attendance`        | Check-in/out, summaries, overtime                             |
+| `projects`          | Projects, assignments, documents, visits                      |
+| `valuations`        | Valuations, photos, GPS data (legacy)                         |
+| `notifications`     | Unified notification service, preferences, device tokens      |
+| `standups`          | Per-project standup chat rooms and messages                   |
+| `catalog`           | Item catalog, external sources, depreciation policies         |
+| `reports`           | One-report-per-project, valuation items, combined PDF         |
 
-| Method | Endpoint                        | Description              |
-|--------|---------------------------------|--------------------------|
-| POST   | `/login/`                       | Login (returns JWT)      |
-| POST   | `/register/`                    | Register new user        |
-| POST   | `/refresh/`                     | Refresh access token     |
-| GET    | `/profile/`                     | Get current user profile |
-| GET    | `/my-role/`                     | Get current user role    |
-| GET    | `/users/`                       | List all users (admin)   |
-| POST   | `/assign-role/`                 | Assign role to user      |
-| POST   | `/leave-requests/create/`       | Submit leave request     |
-| GET    | `/leave-requests/my/`           | My leave requests        |
-| GET    | `/leave-requests/`              | All leave requests (admin/HR) |
-| PATCH  | `/leave-requests/<pk>/update/`  | Approve/reject leave     |
-| GET    | `/leave-requests/statistics/`   | Leave statistics         |
-| POST   | `/payment-slips/generate/`      | Generate payment slips   |
-| GET    | `/payment-slips/`               | All payment slips        |
-| GET    | `/payment-slips/my/`            | My payment slips         |
-| POST   | `/removal-requests/create/`     | Submit removal request   |
-| GET    | `/removal-requests/`            | List removal requests    |
+## Key Data Models (New)
 
-### Attendance (`/api/attendance/`)
+| Model                  | App             | Purpose                                            |
+|------------------------|-----------------|----------------------------------------------------|
+| `Notification`         | notifications   | Per-user notification records                      |
+| `NotificationPreference`| notifications  | User channel preferences per category              |
+| `DeviceToken`          | notifications   | FCM tokens for mobile push                         |
+| `StandupRoom`          | standups        | Per-project chat room (1-to-1 with Project)        |
+| `StandupMessage`       | standups        | Chat message with kind (work_to_do/work_done/free) |
+| `StandupMention`       | standups        | @mention link between message and user             |
+| `ProjectVisit`         | projects        | Scheduled field officer site visits                |
+| `ItemCatalog`          | catalog         | Internal item reference library                    |
+| `ExternalSource`       | catalog         | Config for external catalog HTTP providers         |
+| `DepreciationPolicy`   | catalog         | Default rates per category and method              |
+| `ProjectReport`        | reports         | One combined report per project                    |
+| `ValuationItem`        | reports         | Normalised item in the new report structure        |
+| `ValuationItemPhoto`   | reports         | Photo with GPS/timestamp/device metadata           |
+| `Invitation`           | authentication  | Tracks auto-created account emails and status      |
+| `UserProfile`          | authentication  | Avatar, theme, bio, timezone per user              |
+| `LeavePolicy`          | authentication  | Annual quota per role and leave type               |
+| `LeaveBalance`         | authentication  | Used-days tracker per user/year/type               |
 
-| Method | Endpoint            | Description              |
-|--------|---------------------|--------------------------|
-| POST   | `/mark/`            | Check in                 |
-| POST   | `/checkout/`        | Check out                |
-| GET    | `/today/`           | Today's attendance       |
-| GET    | `/summary/`         | Attendance summary       |
-| GET    | `/summary/weekly/`  | Weekly summary (admin)   |
+## API Endpoints (New)
 
-### Projects (`/api/projects/`)
+### Notifications (`/api/notifications/`)
 
-| Method | Endpoint                              | Description                |
-|--------|---------------------------------------|----------------------------|
-| GET    | `/`                                   | List projects              |
-| POST   | `/`                                   | Create project             |
-| GET    | `/<pk>/`                              | Project detail             |
-| PUT    | `/<pk>/`                              | Update project             |
-| DELETE | `/<pk>/`                              | Delete project             |
-| POST   | `/<id>/assign-field-officer/`         | Assign field officer       |
-| POST   | `/<id>/assign-client/`                | Assign client              |
-| POST   | `/<id>/assign-agent/`                 | Assign agent               |
-| POST   | `/<id>/assign-accessor/`              | Assign accessor            |
-| POST   | `/<id>/assign-senior-valuer/`         | Assign senior valuer       |
-| GET    | `/available-field-officers/`          | List available FOs         |
-| GET    | `/available-clients/`                 | List available clients     |
-| GET    | `/available-agents/`                  | List available agents      |
-| GET    | `/available-accessors/`               | List available accessors   |
-| GET    | `/available-senior-valuers/`          | List available SVs         |
-| POST   | `/<pk>/md-gm-approve/`               | MD/GM approve project      |
-| POST   | `/<pk>/md-gm-reject/`                | MD/GM reject project       |
-| POST   | `/documents/`                         | Upload document            |
+| Method | Endpoint                    | Description                    |
+|--------|-----------------------------|--------------------------------|
+| GET    | `/`                         | List notifications (paginated) |
+| POST   | `/<id>/read/`               | Mark single read               |
+| POST   | `/mark-all-read/`           | Mark all read                  |
+| GET    | `/unread-count/`            | Unread count                   |
+| GET/PUT| `/preferences/`             | Notification preferences       |
+| POST   | `/device-tokens/`           | Register FCM token             |
+| DELETE | `/device-tokens/<id>/`      | Unregister FCM token           |
 
-### Valuations (`/api/valuations/`)
+### Standups (`/api/standups/`)
 
-| Method | Endpoint               | Description              |
-|--------|------------------------|--------------------------|
-| GET    | `/`                    | List valuations          |
-| POST   | `/`                    | Create valuation         |
-| GET    | `/<pk>/`               | Valuation detail         |
-| POST   | `/<pk>/submit/`        | Submit for review        |
-| POST   | `/<pk>/review/`        | Review valuation (SV)    |
-| POST   | `/<pk>/photos/`        | Upload photos            |
+| Method | Endpoint                          | Description             |
+|--------|-----------------------------------|-------------------------|
+| GET    | `/<project_id>/messages/`         | List messages           |
+| POST   | `/<project_id>/post/`             | Post message            |
+| GET    | `/<project_id>/members/`          | List mentionable members|
 
-## Project Structure
+### Catalog (`/api/catalog/`)
 
-### Backend (`backend/`)
+| Method | Endpoint                    | Description                       |
+|--------|-----------------------------|-----------------------------------|
+| GET    | `/suggestions/`             | Item suggestions with confidence  |
+| POST   | `/items/<id>/confirm/`      | Confirm suggestion use            |
+| POST   | `/depreciation/calculate/`  | Calculate depreciation            |
+| GET    | `/depreciation/policies/`   | List depreciation policies        |
 
-```
-backend/
-├── auditra_backend/        # Django project settings
-│   ├── settings.py
-│   ├── urls.py
-│   └── wsgi.py
-├── authentication/         # Users, roles, leave, payments, removals
-├── attendance/             # Check-in/out, summaries, overtime
-├── projects/               # Projects, assignments, documents
-├── valuations/             # Valuations, photos, GPS data
-├── requirements.txt
-└── manage.py
-```
+### Reports (`/api/reports/`)
 
-### Web App (`auditra web app/`)
+| Method | Endpoint                                  | Description              |
+|--------|-------------------------------------------|--------------------------|
+| GET    | `/<project_id>/`                          | Get/create project report|
+| POST   | `/<project_id>/submit/`                   | Submit + generate PDF    |
+| GET/POST| `/<project_id>/items/`                   | List/create valuation items|
+| PATCH  | `/<project_id>/items/<id>/`              | Update item              |
+| POST   | `/<project_id>/items/<id>/merge/`        | Merge duplicate item     |
+| GET/POST| `/<project_id>/items/<id>/photos/`       | Photos for item          |
+| POST   | `/<project_id>/items/<id>/photos/reorder/`| Reorder photos          |
 
-```
-auditra web app/
-├── src/
-│   ├── api/                # Axios client with JWT interceptor
-│   ├── components/         # Layout, Sidebar, shared UI components
-│   ├── contexts/           # AuthContext (login state, role)
-│   ├── pages/
-│   │   ├── admin/          # User mgmt, attendance, leave, payments
-│   │   ├── coordinator/    # Project CRUD, assignments
-│   │   ├── hr/             # Leave requests, attendance, removals
-│   │   ├── accessor/       # Assigned projects
-│   │   ├── senior-valuer/  # Valuation review
-│   │   ├── md-gm/          # Project approval
-│   │   ├── field-officer/  # Attendance/leave/pay dashboard
-│   │   ├── shared/         # Common pages (attendance, leave, pay, profile)
-│   │   ├── auth/           # Login, Register
-│   │   └── public/         # Landing page, public forms
-│   ├── services/           # API service modules
-│   ├── utils/              # Role config, helpers
-│   └── App.jsx             # Router with role-based routing
-├── package.json
-└── vite.config.js
-```
+### WebSocket Endpoints
 
-### Mobile App (`auditra/`)
+| Path                              | Description                   |
+|-----------------------------------|-------------------------------|
+| `ws://host/ws/notifications/`     | Per-user live notifications   |
+| `ws://host/ws/standups/<project_id>/` | Per-project standup chat  |
 
-```
-auditra/
-├── lib/
-│   ├── main.dart
-│   ├── screens/
-│   │   ├── home_screen.dart           # Role routing (FO only)
-│   │   ├── login_screen.dart
-│   │   ├── register_screen.dart
-│   │   ├── field_officer_dashboard.dart
-│   │   ├── field_officer/             # FO-specific screens
-│   │   ├── valuation_form_screen.dart
-│   │   ├── project_details_screen.dart
-│   │   ├── payment_slips_screen.dart
-│   │   ├── leave_request_screen.dart
-│   │   ├── my_leave_requests_screen.dart
-│   │   ├── personal_info_screen.dart
-│   │   └── change_password_screen.dart
-│   ├── models/             # Data models
-│   ├── services/           # API & offline services
-│   ├── theme/              # App theme & colors
-│   └── widgets/            # Reusable widgets
-└── pubspec.yaml
-```
+All WebSocket connections authenticate via `?token=<jwt>` query parameter.
 
-## Running Both Servers
+## Running All Services
 
-For development, run the backend and web app simultaneously in separate terminals:
-
-**Terminal 1 - Backend:**
 ```bash
-cd backend
-python manage.py runserver
-```
+# Terminal 1 – Backend (ASGI)
+cd backend && daphne auditra_backend.asgi:application
 
-**Terminal 2 - Web App:**
-```bash
-cd "auditra web app"
-npm run dev
-```
+# Terminal 2 – Celery worker
+cd backend && celery -A auditra_backend worker -l info
 
-Then open `http://localhost:5173/` in your browser.
+# Terminal 3 – Celery Beat
+cd backend && celery -A auditra_backend beat -l info
+
+# Terminal 4 – Web App
+cd "auditra web app" && npm run dev
+```

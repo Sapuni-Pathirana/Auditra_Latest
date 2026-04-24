@@ -9,10 +9,13 @@ import 'login_screen.dart';
 import 'change_password_screen.dart';
 import 'valuation_form_screen.dart';
 import 'payment_slips_screen.dart';
+import 'notifications_screen.dart';
+import 'profile_screen.dart';
 // import 'field_officer/components/field_officer_header.dart'; // Removed
 import 'field_officer/components/field_officer_project_card.dart';
 import 'field_officer/screens/project_details_screen.dart'; // Added
 import 'field_officer/screens/valuation_reports_screen.dart'; // Added
+import 'visit_scheduling_screen.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sync_status_indicator.dart';
 
@@ -660,6 +663,16 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
               actions: [
                 const SyncStatusIndicator(),
                 IconButton(
+                  icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                  tooltip: 'Notifications',
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.person_outline, color: Colors.white),
+                  tooltip: 'Profile',
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+                ),
+                IconButton(
                   icon: const Icon(Icons.logout, color: Colors.white),
                   onPressed: _logout,
                   tooltip: 'Logout',
@@ -798,6 +811,7 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
                       onViewReports: _viewValuationReports,
                       onCreateReport: _createReport,
                       onSubmit: _submitToAccessor,
+                      onScheduleVisit: _openValuationSchedule,
                     );
                   },
                 ),
@@ -837,17 +851,30 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
       ),
     );
   }
+
+  void _openValuationSchedule(Project project) {
+    Navigator.of(context)
+        .push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => VisitSchedulingScreen(
+          projectId: project.id,
+          projectTitle: project.title,
+          appBarTitle: 'Valuation schedule – ${project.title}',
+          fabLabel: 'Set valuation date',
+          emptyStateText:
+              'No valuation date scheduled. Tap the button to choose when you will visit the site.',
+          confirmDialogTitle: 'Confirm valuation date',
+          confirmDialogScheduleLabel: 'Set date',
+        ),
+      ),
+    )
+        .then((_) {
+      if (mounted) _loadProjects();
+    });
+  }
   
   Color _getPriorityColor(String priority) {
-    switch (priority.toLowerCase()) {
-      case 'high':
-        return const Color(0xFF0D47A1);
-      case 'low':
-        return Colors.green[600]!;
-      case 'medium':
-      default:
-        return Colors.orange[600]!;
-    }
+    return AppColors.priorityColor(priority);
   }
   
   String _formatPriorityLabel(String priority) {

@@ -5,6 +5,8 @@ import '../models/project_model.dart';
 import '../models/valuation_model.dart';
 import '../services/pdf_service.dart';
 import '../services/api_service.dart';
+import 'project_standups_screen.dart';
+import 'visit_scheduling_screen.dart';
 
 class ProjectDetailsScreen extends StatefulWidget {
   final Project project;
@@ -222,14 +224,48 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                 constraints: const BoxConstraints(),
               ),
               const SizedBox(width: 16),
-              const Text(
-                'Project Details',
-                style: TextStyle(
-                  fontFamily: 'Etna Sans Serif',
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1F2937),
+              const Expanded(
+                child: Text(
+                  'Project Details',
+                  style: TextStyle(
+                    fontFamily: 'Etna Sans Serif',
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1F2937),
+                  ),
                 ),
+              ),
+              IconButton(
+                tooltip: 'Standups',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProjectStandupsScreen(
+                        projectId: _project.id,
+                        projectTitle: _project.title,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.forum_outlined),
+                color: const Color(0xFF1F2937),
+              ),
+              IconButton(
+                tooltip: 'Schedule Visit',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => VisitSchedulingScreen(
+                        projectId: _project.id,
+                        projectTitle: _project.title,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.event_available_outlined),
+                color: const Color(0xFF1F2937),
               ),
             ],
           ),

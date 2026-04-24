@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import axiosClient from '../../api/axiosClient';
 import { Link } from 'react-router-dom';
 import {
   Box, TextField, Button, Typography, Alert, Grid, Container, Paper, Stack, Divider,
@@ -43,6 +44,24 @@ export default function EmployeeFormPage() {
   const [cvFile, setCvFile] = useState(null);
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
+  const emailDebounceRef = useRef(null);
+
+  const checkEmailOnBlur = useCallback((value, intent) => {
+    clearTimeout(emailDebounceRef.current);
+    emailDebounceRef.current = setTimeout(async () => {
+      if (!value || !value.includes('@')) return;
+      try {
+        const res = await axiosClient.get('/auth/public/check-email/', { params: { email: value, intent } });
+        if (res.data.conflict) {
+          setEmailError(`This email is already registered with a different role.`);
+        } else if (res.data.exists) {
+          setEmailError('This email is already registered.');
+        } else {
+          setEmailError('');
+        }
+      } catch {}
+    }, 400);
+  }, []);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const fileRef = useRef();
@@ -199,7 +218,14 @@ export default function EmployeeFormPage() {
                     InputLabelProps={{ shrink: true }} sx={inputSx} />
                 </Grid>
                 <Grid item xs={12} sm={6}><TextField fullWidth label="NIC" name="nic" value={form.nic} onChange={handleChange} sx={inputSx} /></Grid>
-                <Grid item xs={12} sm={6}><TextField fullWidth label="Email" name="email" type="email" value={form.email} onChange={handleChange} error={!!emailError} helperText={emailError} sx={inputSx} /></Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth label="Email" name="email" type="email" value={form.email}
+                    onChange={(e) => { handleChange(e); setEmailError(''); }}
+                    onBlur={(e) => checkEmailOnBlur(e.target.value, 'general_employee')}
+                    error={!!emailError} helperText={emailError} sx={inputSx}
+                  />
+                </Grid>
               </Grid>
             </Box>
 

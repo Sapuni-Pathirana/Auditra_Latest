@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'login_screen.dart';
 import 'field_officer_dashboard.dart';
+import 'notifications_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userRole;
@@ -205,6 +207,21 @@ class _HomeScreenState extends State<HomeScreen> {
     // For non-field-officer roles, show "use web app" message
     if (widget.userRole != 'field_officer') {
       return Scaffold(
+        appBar: AppBar(
+          title: const Text('Auditra'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined),
+              tooltip: 'Notifications',
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+            ),
+            IconButton(
+              icon: const Icon(Icons.person_outline),
+              tooltip: 'Profile',
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            ),
+          ],
+        ),
         body: SafeArea(
           child: Center(
             child: Padding(
