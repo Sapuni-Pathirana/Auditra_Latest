@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from projects.models import Project
 from .models import StandupRoom, StandupMessage, StandupMention, StandupMessageView, EXCLUDED_ROLES
 from .serializers import StandupMessageSerializer, MentionedUserSerializer
+from notifications.models import NotificationPreference
 
 
 def _get_room_or_404(project_id, user):
@@ -107,6 +108,16 @@ def post_message(request, project_id):
             continue
 
         is_mentioned = u.id in mentioned_ids
+        # Ensure standup chat stays visible in-app even if an old preference row disabled it.
+        pref, _ = NotificationPreference.objects.get_or_create(
+            user=u,
+            category='chat',
+            defaults={'in_app': True, 'email': False, 'push': False},
+        )
+        if not pref.in_app:
+            pref.in_app = True
+            pref.save(update_fields=['in_app'])
+
         notify(
             user=u,
             category='chat',

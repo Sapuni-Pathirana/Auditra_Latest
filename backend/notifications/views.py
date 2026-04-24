@@ -16,8 +16,8 @@ class NotificationListView(generics.ListAPIView):
         category = self.request.query_params.get('category')
         if category:
             qs = qs.filter(category=category)
-        unread_only = self.request.query_params.get('unread')
-        if unread_only:
+        unread_only = (self.request.query_params.get('unread') or '').strip().lower()
+        if unread_only in ('1', 'true', 'yes'):
             qs = qs.filter(is_read=False)
         return qs[:100]
 

@@ -42,6 +42,16 @@ export default function ThemeProvider({ children }) {
     });
   }, []);
 
+  const setThemePreference = useCallback((next) => {
+    if (!['light', 'dark', 'system'].includes(next)) return;
+    setPreference(next);
+    try { localStorage.setItem('auditra-theme-mode', next); } catch {}
+    // Persist to server (best-effort)
+    try {
+      axiosClient.patch('/auth/profile/me/', { theme_preference: next }).catch(() => {});
+    } catch {}
+  }, []);
+
   /** Called on login with the server-stored preference */
   const applyServerTheme = useCallback((serverPref) => {
     if (serverPref && ['light', 'dark', 'system'].includes(serverPref)) {
@@ -53,7 +63,7 @@ export default function ThemeProvider({ children }) {
   const theme = useMemo(() => createAppTheme(mode), [mode]);
 
   return (
-    <ThemeContext.Provider value={{ mode, preference, toggleTheme, applyServerTheme }}>
+    <ThemeContext.Provider value={{ mode, preference, toggleTheme, setThemePreference, applyServerTheme }}>
       <MuiThemeProvider theme={theme}>
         <CssBaseline />
         {children}

@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Paper, Typography, TextField, Button, Avatar,
-  Divider, Select, MenuItem, FormControl, InputLabel,
+  Box, Paper, Typography, TextField, Button,
   IconButton, CircularProgress, Alert, Chip,
 } from '@mui/material';
-import { CameraAlt, Save, Lock } from '@mui/icons-material';
+import { CameraAlt, Save, Lock, DesktopWindows, LightMode, DarkMode, CheckCircle } from '@mui/icons-material';
 import axiosClient from '../../api/axiosClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { useThemeMode } from '../../contexts/ThemeContext';
@@ -13,7 +12,7 @@ import UserAvatar from '../../components/UserAvatar';
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
-  const { preference, toggleTheme, applyServerTheme } = useThemeMode();
+  const { preference, setThemePreference, applyServerTheme } = useThemeMode();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -92,7 +91,29 @@ export default function Profile() {
     setUploading(false);
   };
 
-  const themeLabel = preference === 'light' ? 'Light' : preference === 'dark' ? 'Dark' : 'System';
+  const themeCards = [
+    {
+      key: 'system',
+      title: 'Default',
+      subtitle: 'Follow device theme',
+      icon: <DesktopWindows fontSize="small" />,
+      previewDark: false,
+    },
+    {
+      key: 'light',
+      title: 'Light',
+      subtitle: 'Bright daytime layout',
+      icon: <LightMode fontSize="small" />,
+      previewDark: false,
+    },
+    {
+      key: 'dark',
+      title: 'Dark',
+      subtitle: 'Low-light travel mode',
+      icon: <DarkMode fontSize="small" />,
+      previewDark: true,
+    },
+  ];
 
   return (
     <Box sx={{ maxWidth: 700, mx: 'auto', py: 3, px: 2 }}>
@@ -167,10 +188,74 @@ export default function Profile() {
 
       {/* Preferences */}
       <Paper sx={{ p: 3, mb: 3, borderRadius: 3 }}>
-        <Typography variant="subtitle1" fontWeight={600} mb={2}>Preferences</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Typography variant="body2">Theme:</Typography>
-          <Button variant="outlined" size="small" onClick={toggleTheme}>{themeLabel} Mode (click to cycle)</Button>
+        <Typography variant="subtitle1" fontWeight={700}>Appearance</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2.5 }}>
+          Choose your preferred theme. This applies across the entire app.
+        </Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+            gap: 2,
+          }}
+        >
+          {themeCards.map((card) => {
+            const selected = preference === card.key;
+            return (
+              <Paper
+                key={card.key}
+                onClick={() => setThemePreference(card.key)}
+                elevation={0}
+                sx={{
+                  p: 1.75,
+                  borderRadius: 3,
+                  border: '2px solid',
+                  borderColor: selected ? 'primary.main' : 'divider',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  position: 'relative',
+                  '&:hover': { borderColor: 'primary.main' },
+                }}
+              >
+                {selected && (
+                  <CheckCircle
+                    color="primary"
+                    sx={{ position: 'absolute', top: 10, right: 10, fontSize: 20 }}
+                  />
+                )}
+
+                <Box
+                  sx={{
+                    height: 96,
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: card.previewDark ? '#1f2937' : '#d1d5db',
+                    bgcolor: card.previewDark ? '#0b1220' : '#f8fafc',
+                    overflow: 'hidden',
+                    mb: 1.5,
+                  }}
+                >
+                  <Box sx={{ height: 10, bgcolor: card.previewDark ? '#14b8a6' : '#0ea5a4' }} />
+                  <Box sx={{ p: 1.25 }}>
+                    <Box sx={{ width: '72%', height: 7, borderRadius: 1, bgcolor: card.previewDark ? '#4b5563' : '#9ca3af', mb: 1 }} />
+                    <Box sx={{ width: '48%', height: 7, borderRadius: 1, bgcolor: card.previewDark ? '#374151' : '#cbd5e1', mb: 1.25 }} />
+                    <Box sx={{ display: 'flex', gap: 0.75 }}>
+                      <Box sx={{ width: 28, height: 13, borderRadius: 1, bgcolor: card.previewDark ? '#111827' : '#ffffff', border: '1px solid', borderColor: card.previewDark ? '#334155' : '#e5e7eb' }} />
+                      <Box sx={{ width: 28, height: 13, borderRadius: 1, bgcolor: card.previewDark ? '#111827' : '#ffffff', border: '1px solid', borderColor: card.previewDark ? '#334155' : '#e5e7eb' }} />
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.75 }}>
+                  {card.icon}
+                  <Typography variant="subtitle1" fontWeight={700}>{card.title}</Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mt: 0.25 }}>
+                  {card.subtitle}
+                </Typography>
+              </Paper>
+            );
+          })}
         </Box>
       </Paper>
 

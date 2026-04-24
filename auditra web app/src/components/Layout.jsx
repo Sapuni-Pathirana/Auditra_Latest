@@ -11,11 +11,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
-import LightModeIcon from '@mui/icons-material/LightMode';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
 import { useAuth } from '../contexts/AuthContext';
-import { useThemeMode } from '../contexts/ThemeContext';
 import { roleMenuConfig, getRoleLabel } from '../utils/roleConfig';
 import NotificationDropdown from './NotificationDropdown';
 import UserAvatar from './UserAvatar';
@@ -25,7 +21,6 @@ const DRAWER_COLLAPSED = 72;
 
 export default function Layout() {
   const { user, role, passwordChanged, logout } = useAuth();
-  const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -243,13 +238,6 @@ export default function Layout() {
 
             {/* Notifications */}
             <NotificationDropdown />
-
-            {/* Theme toggle */}
-            <Tooltip title={mode === 'light' ? 'Switch to Dark' : mode === 'dark' ? 'Switch to System' : 'Switch to Light'}>
-              <IconButton onClick={toggleTheme} sx={{ ml: 0.5 }}>
-                {mode === 'light' ? <LightModeIcon /> : mode === 'dark' ? <DarkModeIcon /> : <SettingsBrightnessIcon />}
-              </IconButton>
-            </Tooltip>
 
             {/* User menu */}
             <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ p: 0.5, ml: 0.5 }}>
