@@ -33,6 +33,31 @@ from .serializers import (
 )
 
 
+def _notify_auth_users(users, *, category, severity, title, message, meta=None, action_url='', email_subject=None, actor=None):
+    """Best-effort helper for auth/submission notifications."""
+    if meta is None:
+        meta = {}
+    try:
+        from notifications.services import notify
+        sent = set()
+        for u in users:
+            if u is None or (actor is not None and u == actor) or u.id in sent:
+                continue
+            sent.add(u.id)
+            notify(
+                user=u,
+                category=category,
+                severity=severity,
+                title=title,
+                message=message,
+                meta=meta,
+                action_url=action_url,
+                email_subject=email_subject or title,
+            )
+    except Exception:
+        pass
+
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (AllowAny,)
@@ -60,6 +85,15 @@ class RegisterView(generics.CreateAPIView):
             )
         except Exception:
             pass
+        _notify_auth_users(
+            [user],
+            category='auth',
+            severity='success',
+            title='Account created',
+            message='Your account has been created successfully.',
+            meta={'user_id': user.id},
+            action_url='/dashboard',
+        )
 
         return Response({
             'user': user_data,
@@ -200,6 +234,15 @@ class ChangePasswordView(APIView):
             )
         except Exception:
             pass
+        _notify_auth_users(
+            [user],
+            category='auth',
+            severity='info',
+            title='Password changed',
+            message='Your password was changed successfully.',
+            meta={'user_id': user.id},
+            action_url='/profile',
+        )
 
         return Response(
             {'message': 'Password changed successfully'},
@@ -354,6 +397,16 @@ class AssignRoleView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                [user],
+                category='user',
+                severity='info',
+                title='Role updated',
+                message=f'Your role has been updated to "{role}".',
+                meta={'user_id': user.id, 'role': role},
+                action_url='/profile',
+                actor=request.user,
+            )
 
             return Response({
                 'message': 'Role assigned successfully',
@@ -411,6 +464,15 @@ class DeleteUserView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                [request.user],
+                category='user',
+                severity='warning',
+                title='User deleted',
+                message=f'User {user_name} ({user_role}) was deleted from the system.',
+                meta={'deleted_user_id': user_id_val},
+                action_url='/dashboard/users',
+            )
             
             return Response({
                 'message': f'User {user_name} ({user_role}) has been deleted successfully from the database'
@@ -557,6 +619,15 @@ class GeneratePaymentSlipsView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                [request.user],
+                category='payment',
+                severity='info',
+                title='Payment slips generated',
+                message=f'Generated/updated payment slips for {month}/{year}.',
+                meta={'month': month, 'year': year, 'generated': generated_count, 'updated': updated_count},
+                action_url='/dashboard/payment-slips',
+            )
             
             return Response({
                 'success': True,
@@ -636,6 +707,20 @@ class UploadPaymentSlipsView(APIView):
                     category='payment',
                     ip_address=get_client_ip(request),
                     metadata={'month': month, 'year': year, 'uploaded_count': updated_count},
+                )
+            except Exception:
+                pass
+            try:
+                recipients = [ps.user for ps in payment_slips.select_related('user') if getattr(ps, 'user', None)]
+                _notify_auth_users(
+                    recipients,
+                    category='payment',
+                    severity='info',
+                    title='Payment slip available',
+                    message=f'Your payment slip for {month}/{year} is now published.',
+                    meta={'month': month, 'year': year},
+                    action_url='/payment-slips',
+                    actor=request.user,
                 )
             except Exception:
                 pass
@@ -1131,6 +1216,19 @@ class ClientRegistrationView(APIView):
                     )
                 except Exception:
                     pass
+                try:
+                    admins = User.objects.filter(role__role='admin', is_active=True)
+                    _notify_auth_users(
+                        list(admins),
+                        category='submission',
+                        severity='info',
+                        title='New client form submission',
+                        message=f'{submission.first_name} {submission.last_name} submitted a new client form.',
+                        meta={'submission_id': submission.id},
+                        action_url='/dashboard/submissions',
+                    )
+                except Exception:
+                    pass
 
                 # Send confirmation email to client
                 try:
@@ -1198,6 +1296,19 @@ class EmployeeRegistrationView(APIView):
                         category='submission',
                         ip_address=get_client_ip(request),
                         metadata={'submission_id': submission.id},
+                    )
+                except Exception:
+                    pass
+                try:
+                    admins = User.objects.filter(role__role='admin', is_active=True)
+                    _notify_auth_users(
+                        list(admins),
+                        category='submission',
+                        severity='info',
+                        title='New employee form submission',
+                        message=f'{submission.first_name} {submission.last_name} submitted a new employee application.',
+                        meta={'submission_id': submission.id},
+                        action_url='/dashboard/employee-submissions',
                     )
                 except Exception:
                     pass
@@ -1269,9 +1380,14 @@ class CreateLeaveRequestView(APIView):
                     hr_heads = User.objects.filter(role__role='hr_head', is_active=True)
                     employee_name = request.user.get_full_name() or request.user.username
                     title = f'New leave request from {employee_name}'
+                    half_day_suffix = ''
+                    if getattr(leave_request, 'is_half_day', False):
+                        period_raw = (getattr(leave_request, 'half_day_period', '') or '').strip().lower()
+                        period_label = 'morning' if period_raw == 'morning' else 'afternoon'
+                        half_day_suffix = f' (half-day, {period_label})'
                     msg = (
                         f"{employee_name} requested {leave_request.days} day(s) of "
-                        f"{leave_request.get_leave_type_display()} from {leave_request.start_date} "
+                        f"{leave_request.get_leave_type_display()}{half_day_suffix} from {leave_request.start_date} "
                         f"to {leave_request.end_date}."
                     )
                     meta = {'leave_id': leave_request.id}
@@ -1636,6 +1752,16 @@ class CreateEmployeeRemovalRequestView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                [user_to_remove] + list(User.objects.filter(role__role='admin', is_active=True)),
+                category='removal',
+                severity='warning',
+                title='Employee removal request created',
+                message=f'Removal request created for {user_to_remove.get_full_name() or user_to_remove.username}.',
+                meta={'removal_request_id': removal_request.id, 'user_id': user_to_remove.id},
+                action_url='/dashboard/removal-requests',
+                actor=request.user,
+            )
 
             return Response({
                 'success': True,
@@ -1731,6 +1857,16 @@ class ApproveRemovalRequestView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                [removal_request.requested_by],
+                category='removal',
+                severity='success',
+                title='Removal request approved',
+                message=f'Removal request approved for {user_name}.',
+                meta={'removal_request_id': removal_request.id, 'user_id': user_id_val},
+                action_url='/dashboard/removal-requests',
+                actor=request.user,
+            )
             
             serializer = EmployeeRemovalRequestSerializer(removal_request)
             
@@ -1795,6 +1931,16 @@ class RejectRemovalRequestView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                [removal_request.requested_by, removal_request.user],
+                category='removal',
+                severity='info',
+                title='Removal request rejected',
+                message=f'Removal request for {user_name} was rejected.',
+                meta={'removal_request_id': removal_request.id},
+                action_url='/dashboard/removal-requests',
+                actor=request.user,
+            )
             
             return Response({
                 'success': True,
@@ -1946,6 +2092,22 @@ class ClientSubmissionDetailView(APIView):
                 )
             except Exception:
                 pass
+            try:
+                recipients = [submission.coordinator] if submission.coordinator else []
+                if hasattr(request.user, 'role') and request.user.role.role == 'admin':
+                    recipients.extend(list(User.objects.filter(role__role='admin', is_active=True)))
+                _notify_auth_users(
+                    recipients,
+                    category='submission',
+                    severity='info',
+                    title='Client submission updated',
+                    message=f'Status updated to {new_status or submission.status} for {submission.first_name} {submission.last_name}.',
+                    meta={'submission_id': submission.id, 'status': submission.status},
+                    action_url='/dashboard/submissions',
+                    actor=request.user,
+                )
+            except Exception:
+                pass
 
             serializer = ClientFormSubmissionSerializer(submission)
             return Response({'success': True, 'data': serializer.data})
@@ -1972,6 +2134,15 @@ class ClientSubmissionDetailView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                [request.user],
+                category='submission',
+                severity='warning',
+                title='Submission cancelled',
+                message=f'Cancelled rejected submission from {submission.first_name} {submission.last_name}.',
+                meta={'submission_id': submission.id},
+                action_url='/dashboard/submissions',
+            )
 
             submission.delete()
             return Response({'success': True, 'message': 'Submission cancelled and removed.'})
@@ -2262,6 +2433,15 @@ class EmployeeSubmissionDetailView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                [request.user],
+                category='submission',
+                severity='info',
+                title='Employee submission updated',
+                message=f'Status updated to {new_status or submission.status} for {submission.first_name} {submission.last_name}.',
+                meta={'submission_id': submission.id, 'status': submission.status},
+                action_url='/dashboard/employee-submissions',
+            )
 
             serializer = EmployeeFormSubmissionSerializer(submission)
             return Response({'success': True, 'data': serializer.data})
@@ -2430,6 +2610,16 @@ class HireEmployeeSubmissionView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                [user],
+                category='user',
+                severity='success',
+                title='Account created',
+                message='Your employee account is ready. Use the emailed credentials to sign in.',
+                meta={'user_id': user.id, 'role': role},
+                action_url='/login',
+                actor=request.user,
+            )
 
             return Response({
                 'success': True,
@@ -2489,6 +2679,16 @@ class AcceptAssignmentView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                list(User.objects.filter(role__role='admin', is_active=True)),
+                category='submission',
+                severity='info',
+                title='Coordinator accepted assignment',
+                message=f'{request.user.get_full_name() or request.user.username} accepted a submission assignment.',
+                meta={'submission_id': submission.id},
+                action_url='/dashboard/submissions',
+                actor=request.user,
+            )
             
             serializer = ClientFormSubmissionSerializer(submission)
             return Response({
@@ -2569,6 +2769,16 @@ class RejectAssignmentView(APIView):
                 )
             except Exception:
                 pass
+            _notify_auth_users(
+                list(User.objects.filter(role__role='admin', is_active=True)),
+                category='submission',
+                severity='warning',
+                title='Coordinator rejected assignment',
+                message=f'{request.user.get_full_name() or request.user.username} rejected an assignment. Reason: {rejection_reason}',
+                meta={'submission_id': submission.id, 'reason': rejection_reason},
+                action_url='/dashboard/submissions',
+                actor=request.user,
+            )
             
             serializer = ClientFormSubmissionSerializer(submission)
             return Response({

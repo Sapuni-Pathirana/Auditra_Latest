@@ -27,6 +27,27 @@ export default function ProjectStandups({ projectId }) {
   const [mentionQuery, setMentionQuery] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const currentUsername = (() => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed?.username || parsed?.user?.username || null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const appendUniqueMessage = useCallback((incoming) => {
+    if (!incoming) return;
+    setMessages((prev) => {
+      const incomingId = incoming.id;
+      if (incomingId != null && prev.some((m) => m.id === incomingId)) {
+        return prev;
+      }
+      return [...prev, incoming];
+    });
+  }, []);
 
   const loadMessages = useCallback(async () => {
     setLoading(true);
@@ -59,10 +80,7 @@ export default function ProjectStandups({ projectId }) {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'standup_message' && data.message) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === data.message.id)) return prev;
-              return [...prev, data.message];
-            });
+            appendUniqueMessage(data.message);
           }
         } catch {}
       };
@@ -86,7 +104,7 @@ export default function ProjectStandups({ projectId }) {
       clearTimeout(reconnectTimer);
       try { ws && ws.close(); } catch {}
     };
-  }, [projectId]);
+  }, [projectId, appendUniqueMessage]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -95,9 +113,11 @@ export default function ProjectStandups({ projectId }) {
   const handleSend = async () => {
     if (!body.trim()) return;
     setSending(true);
+    const payload = { body: body.trim(), kind };
     try {
-      const res = await axiosClient.post(`/standups/projects/${projectId}/messages/post/`, { body, kind });
-      setMessages((prev) => [...prev, res.data]);
+      const res = await axiosClient.post(`/standups/projects/${projectId}/messages/post/`, payload);
+      // Keep POST fallback for slower websocket delivery, deduped by id.
+      appendUniqueMessage(res.data);
       setBody('');
       setKind('free');
     } catch {}
@@ -139,33 +159,90 @@ export default function ProjectStandups({ projectId }) {
           </Box>
         ) : (
           <List disablePadding>
-            {messages.map((msg, i) => (
-              <ListItem key={msg.id || i} alignItems="flex-start" sx={{ px: 0, py: 1.5 }}>
-                <UserAvatar user={{ username: msg.author_name, profile_image_url: msg.author_avatar }} size={36} sx={{ mr: 1.5, mt: 0.5 }} />
-                <Box sx={{ flex: 1 }}>
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.5 }}>
-                    <Typography variant="body2" fontWeight={700}>{msg.author_name}</Typography>
-                    <Typography variant="caption" color="text.secondary">{msg.author_role}</Typography>
-                    <Chip
-                      label={KIND_LABELS[msg.kind]?.label || msg.kind}
-                      size="small"
-                      color={KIND_LABELS[msg.kind]?.color || 'default'}
-                      sx={{ height: 18, fontSize: '0.65rem' }}
+            {messages.map((msg, i) => {
+              const isMine = currentUsername && msg.author_username === currentUsername;
+              const seenByOthers = Array.isArray(msg.seen_by)
+                ? msg.seen_by.filter((v) => v.username !== msg.author_username)
+                : [];
+              return (
+                <ListItem
+                  key={msg.id || i}
+                  alignItems="flex-start"
+                  sx={{ px: 0, py: 1.2, justifyContent: isMine ? 'flex-end' : 'flex-start' }}
+                >
+                  {!isMine && (
+                    <UserAvatar
+                      user={{ username: msg.author_name, profile_image_url: msg.author_avatar }}
+                      size={36}
+                      sx={{ mr: 1.5, mt: 0.5 }}
                     />
-                    <Typography variant="caption" color="text.disabled" sx={{ ml: 'auto' }}>
-                      {formatTime(msg.created_at)}
+                  )}
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      px: 1.5,
+                      py: 1,
+                      maxWidth: '82%',
+                      borderRadius: 2,
+                      bgcolor: isMine ? '#DCF8C6' : '#FFFFFF',
+                      color: 'text.primary',
+                      border: isMine ? 'none' : '1px solid',
+                      borderColor: 'divider',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.5 }}>
+                      <Typography variant="body2" fontWeight={700} color={isMine ? 'success.dark' : 'primary.main'}>
+                        {msg.author_name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {msg.author_role}
+                      </Typography>
+                      <Chip
+                        label={KIND_LABELS[msg.kind]?.label || msg.kind}
+                        size="small"
+                        color={KIND_LABELS[msg.kind]?.color || 'default'}
+                        sx={{ height: 18, fontSize: '0.65rem' }}
+                      />
+                      <Typography
+                        variant="caption"
+                        color="text.disabled"
+                        sx={{ ml: 'auto' }}
+                      >
+                        {formatTime(msg.created_at)}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" sx={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                      {msg.body.split(' ').map((word, wi) =>
+                        word.startsWith('@') ? (
+                          <Typography
+                            key={wi}
+                            component="span"
+                            color="primary.main"
+                            fontWeight={700}
+                          >
+                            {word}{' '}
+                          </Typography>
+                        ) : `${word} `
+                      )}
                     </Typography>
-                  </Box>
-                  <Typography variant="body2" sx={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                    {msg.body.split(' ').map((word, wi) =>
-                      word.startsWith('@') ? (
-                        <Typography key={wi} component="span" color="primary.main" fontWeight={600}>{word} </Typography>
-                      ) : word + ' '
+                    {isMine && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        {seenByOthers.length > 0
+                          ? `Seen by: ${seenByOthers.map((u) => u.name || u.username).join(', ')}`
+                          : 'Sent'}
+                      </Typography>
                     )}
-                  </Typography>
-                </Box>
-              </ListItem>
-            ))}
+                  </Paper>
+                  {isMine && (
+                    <UserAvatar
+                      user={{ username: msg.author_name, profile_image_url: msg.author_avatar }}
+                      size={36}
+                      sx={{ ml: 1.5, mt: 0.5 }}
+                    />
+                  )}
+                </ListItem>
+              );
+            })}
             <div ref={bottomRef} />
           </List>
         )}

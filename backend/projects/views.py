@@ -34,6 +34,31 @@ from .utils import check_user_by_email, process_client_for_project, process_agen
 logger = logging.getLogger(__name__)
 
 
+def _notify_project_users(users, *, category, severity, title, message, meta=None, action_url='', email_subject=None, actor=None):
+    """Best-effort helper to send notifications to multiple users."""
+    if meta is None:
+        meta = {}
+    try:
+        from notifications.services import notify
+        sent = set()
+        for u in users:
+            if u is None or (actor is not None and u == actor) or u.id in sent:
+                continue
+            sent.add(u.id)
+            notify(
+                user=u,
+                category=category,
+                severity=severity,
+                title=title,
+                message=message,
+                meta=meta,
+                action_url=action_url,
+                email_subject=email_subject or title,
+            )
+    except Exception:
+        pass
+
+
 def _format_payhere_amount(value):
     return f"{Decimal(value).quantize(Decimal('0.01')):.2f}"
 
@@ -737,6 +762,16 @@ class AssignClientView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [client],
+            category='project',
+            severity='info',
+            title=f'Project assignment — {project.title}',
+            message='You have been assigned as client for this project.',
+            meta={'project_id': project.id, 'role': 'client'},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'message': 'Client assigned successfully',
@@ -793,6 +828,16 @@ class AssignAgentView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [agent],
+            category='project',
+            severity='info',
+            title=f'Project assignment — {project.title}',
+            message='You have been assigned as agent for this project.',
+            meta={'project_id': project.id, 'role': 'agent'},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'message': 'Agent assigned successfully',
@@ -849,6 +894,16 @@ class AssignAccessorView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [accessor],
+            category='project',
+            severity='info',
+            title=f'Project assignment — {project.title}',
+            message='You have been assigned as accessor for this project.',
+            meta={'project_id': project.id, 'role': 'accessor'},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'message': 'Accessor assigned successfully',
@@ -905,6 +960,16 @@ class AssignSeniorValuerView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [senior_valuer],
+            category='project',
+            severity='info',
+            title=f'Project assignment — {project.title}',
+            message='You have been assigned as senior valuer for this project.',
+            meta={'project_id': project.id, 'role': 'senior_valuer'},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'message': 'Senior valuer assigned successfully',
@@ -1047,6 +1112,23 @@ class ProjectDocumentView(generics.CreateAPIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [
+                project.coordinator,
+                project.assigned_field_officer,
+                project.assigned_client,
+                project.assigned_agent,
+                project.assigned_accessor,
+                project.assigned_senior_valuer,
+            ],
+            category='project',
+            severity='success',
+            title=f'Project started — {project.title}',
+            message='Project status is now In Progress.',
+            meta={'project_id': project.id, 'status': 'in_progress'},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         # Feature #3 (C1): notify recipients of a new document.
         try:
@@ -1112,6 +1194,16 @@ class ProjectDocumentDeleteView(generics.DestroyAPIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [project.assigned_agent],
+            category='payment',
+            severity='success',
+            title=f'Agent payment recorded — {project.title}',
+            message=f'Your payment of Rs. {amount:,.2f} has been recorded.',
+            meta={'project_id': project.id, 'amount': str(amount)},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         # Feature #3 (C1): tell the coordinator when someone else deletes a document.
         try:
@@ -1168,6 +1260,23 @@ def md_gm_approve_project(request, pk):
         )
     except Exception:
         pass
+    _notify_project_users(
+        [
+            project.coordinator,
+            project.assigned_field_officer,
+            project.assigned_client,
+            project.assigned_agent,
+            project.assigned_accessor,
+            project.assigned_senior_valuer,
+        ],
+        category='project',
+        severity='success',
+        title=f'Project approved — {project.title}',
+        message='MD/GM approved this project.',
+        meta={'project_id': project.id, 'approval_status': 'approved'},
+        action_url=f'/dashboard/projects/{project.id}',
+        actor=request.user,
+    )
 
     return Response({
         'message': 'Project approved successfully',
@@ -1212,6 +1321,23 @@ def md_gm_reject_project(request, pk):
         )
     except Exception:
         pass
+    _notify_project_users(
+        [
+            project.coordinator,
+            project.assigned_field_officer,
+            project.assigned_client,
+            project.assigned_agent,
+            project.assigned_accessor,
+            project.assigned_senior_valuer,
+        ],
+        category='project',
+        severity='warning',
+        title=f'Project rejected — {project.title}',
+        message=f'MD/GM rejected this project. Reason: {reason or "No reason provided"}',
+        meta={'project_id': project.id, 'approval_status': 'rejected', 'reason': reason},
+        action_url=f'/dashboard/projects/{project.id}',
+        actor=request.user,
+    )
 
     return Response({
         'message': 'Project rejected',
@@ -1269,6 +1395,16 @@ def admin_approve_project(request, pk):
         )
     except Exception:
         pass
+    _notify_project_users(
+        [project.coordinator],
+        category='project',
+        severity='success',
+        title=f'Direct project approved — {project.title}',
+        message='Admin approved your project for progression.',
+        meta={'project_id': project.id, 'admin_approval_status': 'approved'},
+        action_url=f'/dashboard/projects/{project.id}',
+        actor=request.user,
+    )
 
     return Response({
         'message': 'Project approved successfully',
@@ -1333,6 +1469,16 @@ def admin_reject_project(request, pk):
         )
     except Exception:
         pass
+    _notify_project_users(
+        [project.coordinator],
+        category='project',
+        severity='warning',
+        title=f'Direct project rejected — {project.title}',
+        message=f'Admin rejected this project. Reason: {reason}',
+        meta={'project_id': project.id, 'admin_approval_status': 'rejected', 'reason': reason},
+        action_url=f'/dashboard/projects/{project.id}',
+        actor=request.user,
+    )
 
     return Response({
         'message': 'Project rejected',
@@ -1386,6 +1532,20 @@ def request_admin_approval(request, pk):
             category='project',
             ip_address=get_client_ip(request),
             metadata={'project_id': project.id, 'project_title': project.title},
+        )
+    except Exception:
+        pass
+    try:
+        admins = User.objects.filter(role__role='admin', is_active=True)
+        _notify_project_users(
+            list(admins),
+            category='project',
+            severity='info',
+            title=f'Admin approval requested — {project.title}',
+            message=f'{request.user.get_full_name() or request.user.username} requested admin approval for a direct project.',
+            meta={'project_id': project.id, 'admin_approval_status': 'pending'},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
         )
     except Exception:
         pass
@@ -1576,6 +1736,26 @@ Please upload the bank slip after making the payment."""
             )
         except Exception:
             pass
+        _notify_project_users(
+            list(User.objects.filter(role__role='admin', is_active=True)),
+            category='project',
+            severity='warning',
+            title=f'Cancellation requested — {project.title}',
+            message=f'{request.user.get_full_name() or request.user.username} requested project cancellation.',
+            meta={'project_id': project.id, 'request_id': cancellation_request.id, 'reason': reason},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
+        _notify_project_users(
+            [project.assigned_client],
+            category='payment',
+            severity='info',
+            title=f'Payment requested — {project.title}',
+            message=f'A payment request was sent for Rs. {project.estimated_value:,.2f}.',
+            meta={'project_id': project.id, 'payment_id': payment.id, 'status': payment.payment_status},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'success': True,
@@ -1650,6 +1830,16 @@ class UploadBankSlipView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            assigned_users,
+            category='project',
+            severity='warning',
+            title=f'Project cancelled — {project.title}',
+            message=f'Cancellation request approved. Reason: {cancellation_request.reason}',
+            meta={'project_id': project.id, 'request_id': request_id, 'status': 'cancelled'},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         # Feature #3 (C1): notify coordinator that a bank slip is awaiting review.
         try:
@@ -1746,6 +1936,16 @@ class ApprovePaymentView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [cancellation_request.requested_by],
+            category='project',
+            severity='info',
+            title=f'Cancellation request rejected — {cancellation_request.project.title}',
+            message=f'Admin rejected your cancellation request. Remarks: {admin_remarks}',
+            meta={'project_id': cancellation_request.project.id, 'request_id': request_id, 'status': 'rejected'},
+            action_url=f'/dashboard/projects/{cancellation_request.project.id}',
+            actor=request.user,
+        )
 
         # Feature #3 (C1): notify client that payment was approved.
         try:
@@ -1845,6 +2045,16 @@ class RejectPaymentView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [agent, request.user],
+            category='project',
+            severity='info',
+            title=f'Commission report generated — {project.title}',
+            message=f'Commission report is ready (Rs. {payment.agent_payment_amount:,.2f}).',
+            meta={'project_id': project.id, 'report_id': report.id},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=None,
+        )
 
         # Feature #3 (C1): notify client that payment was rejected.
         try:
@@ -2228,6 +2438,16 @@ class StartProjectView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [report.agent],
+            category='project',
+            severity='info',
+            title=f'Commission report sent — {report.project.title}',
+            message='Your commission report has been sent to your email.',
+            meta={'project_id': report.project.id, 'report_id': report.id},
+            action_url=f'/dashboard/projects/{report.project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'success': True,
@@ -2394,6 +2614,16 @@ class RecordAgentPaymentView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [project.assigned_agent],
+            category='payment',
+            severity='success',
+            title=f'Agent payment recorded — {project.title}',
+            message=f'Your commission payment of Rs. {amount:,.2f} has been recorded.',
+            meta={'project_id': project.id, 'amount': str(amount)},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'success': True,
@@ -2465,6 +2695,16 @@ class RequestCancellationView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            list(User.objects.filter(role__role='admin', is_active=True)),
+            category='project',
+            severity='warning',
+            title=f'Cancellation requested — {project.title}',
+            message=f'{request.user.get_full_name() or request.user.username} requested cancellation.',
+            meta={'project_id': project.id, 'request_id': cancellation_request.id, 'reason': reason},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'success': True,
@@ -2605,6 +2845,16 @@ class ApproveCancellationView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            assigned_users,
+            category='project',
+            severity='warning',
+            title=f'Project cancelled — {project.title}',
+            message=f'Cancellation approved. Reason: {cancellation_request.reason}',
+            meta={'project_id': project.id, 'request_id': request_id, 'status': 'approved'},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'success': True,
@@ -2680,6 +2930,16 @@ class RejectCancellationView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [cancellation_request.requested_by],
+            category='project',
+            severity='info',
+            title=f'Cancellation request rejected — {cancellation_request.project.title}',
+            message=f'Admin remarks: {admin_remarks}',
+            meta={'project_id': cancellation_request.project.id, 'request_id': request_id, 'status': 'rejected'},
+            action_url=f'/dashboard/projects/{cancellation_request.project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'success': True,
@@ -2887,6 +3147,16 @@ class GenerateCommissionReportView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [agent],
+            category='project',
+            severity='info',
+            title=f'Commission report generated — {project.title}',
+            message='A commission report has been generated for your payment.',
+            meta={'project_id': project.id, 'report_id': report.id},
+            action_url=f'/dashboard/projects/{project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'success': True,
@@ -2958,6 +3228,16 @@ class SendCommissionReportView(APIView):
             )
         except Exception:
             pass
+        _notify_project_users(
+            [report.agent],
+            category='project',
+            severity='info',
+            title=f'Commission report sent — {report.project.title}',
+            message='Your commission report was sent to your email.',
+            meta={'project_id': report.project.id, 'report_id': report.id},
+            action_url=f'/dashboard/projects/{report.project.id}',
+            actor=request.user,
+        )
 
         return Response({
             'success': True,

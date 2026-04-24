@@ -14,6 +14,28 @@ from .serializers import (
 )
 
 
+def _notify_attendance_action(user, title, message, action, extra_meta=None):
+    """Best-effort in-app notification for attendance actions."""
+    try:
+        from notifications.services import notify
+        meta = {'action': action}
+        if extra_meta:
+            meta.update(extra_meta)
+        notify(
+            user=user,
+            category='attendance',
+            severity='info',
+            title=title,
+            message=message,
+            meta=meta,
+            action_url='/attendance',
+            email_subject=title,
+        )
+    except Exception:
+        # Notifications should not block attendance operations.
+        pass
+
+
 class MarkAttendanceView(APIView):
     """Mark attendance (check-in) for the current day"""
     permission_classes = [IsAuthenticated]
@@ -71,6 +93,13 @@ class MarkAttendanceView(APIView):
             )
         except Exception:
             pass
+        _notify_attendance_action(
+            user=user,
+            title='Attendance Marked',
+            message=f'You checked in on {today}.',
+            action='check_in',
+            extra_meta={'date': today.isoformat()},
+        )
 
         return Response({
             'message': 'Attendance marked successfully',
@@ -113,6 +142,17 @@ class LeaveEarlyView(APIView):
             )
         except Exception:
             pass
+        _notify_attendance_action(
+            user=user,
+            title='Early Leave Recorded',
+            message=f'You marked early leave on {today} ({attendance.working_hours} hours).',
+            action='leave_early',
+            extra_meta={
+                'date': today.isoformat(),
+                'working_hours': float(attendance.working_hours),
+                'is_full_day': attendance.is_full_day(),
+            },
+        )
 
         serializer = AttendanceSerializer(attendance)
         return Response({
@@ -163,6 +203,13 @@ class CheckOutView(APIView):
             )
         except Exception:
             pass
+        _notify_attendance_action(
+            user=user,
+            title='Checked Out',
+            message=f'You checked out on {today}.',
+            action='check_out',
+            extra_meta={'date': today.isoformat()},
+        )
 
         serializer = AttendanceSerializer(attendance)
         return Response({
@@ -230,6 +277,13 @@ class StartOvertimeView(APIView):
             )
         except Exception:
             pass
+        _notify_attendance_action(
+            user=user,
+            title='Overtime Started',
+            message=f'You started overtime on {today}.',
+            action='overtime_start',
+            extra_meta={'date': today.isoformat()},
+        )
 
         serializer = AttendanceSerializer(attendance)
         return Response({
@@ -277,6 +331,16 @@ class EndOvertimeView(APIView):
             )
         except Exception:
             pass
+        _notify_attendance_action(
+            user=user,
+            title='Overtime Ended',
+            message=f'You ended overtime on {today} ({attendance.overtime_hours} hours).',
+            action='overtime_end',
+            extra_meta={
+                'date': today.isoformat(),
+                'overtime_hours': float(attendance.overtime_hours),
+            },
+        )
 
         serializer = AttendanceSerializer(attendance)
         return Response({

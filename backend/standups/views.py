@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from projects.models import Project
-from .models import StandupRoom, StandupMessage, StandupMention, EXCLUDED_ROLES
+from .models import StandupRoom, StandupMessage, StandupMention, StandupMessageView, EXCLUDED_ROLES
 from .serializers import StandupMessageSerializer, MentionedUserSerializer
 
 
@@ -32,6 +32,12 @@ def _get_room_or_404(project_id, user):
     return room, project, None
 
 
+def _mark_seen(messages, user):
+    """Mark returned messages as seen by the current user."""
+    for msg in messages:
+        StandupMessageView.objects.get_or_create(message=msg, viewer=user)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_messages(request, project_id):
@@ -47,6 +53,7 @@ def list_messages(request, project_id):
         qs = qs.filter(id__lt=before_id)
     messages = list(qs.order_by('-created_at')[:limit])
     messages.reverse()
+    _mark_seen(messages, request.user)
 
     serializer = StandupMessageSerializer(messages, many=True, context={'request': request})
     return Response(serializer.data)
@@ -106,6 +113,9 @@ def post_message(request, project_id):
             action_url=f'/dashboard/projects/{project.id}/standups',
         )
 
+    # Author has seen their own message.
+    StandupMessageView.objects.get_or_create(message=msg, viewer=request.user)
+
     # Broadcast via WebSocket
     _broadcast_message(room, msg, request)
 
@@ -137,11 +147,28 @@ def _broadcast_message(room, msg, request):
             return
 
         data = StandupMessageSerializer(msg, context={'request': request}).data
-        for member in room.get_members():
-            async_to_sync(channel_layer.group_send)(
-                f'standup_{room.project_id}',
-                {'type': 'standup.message', 'message': data},
-            )
+        async_to_sync(channel_layer.group_send)(
+            f'standup_{room.project_id}',
+            {'type': 'standup.message', 'message': data},
+        )
         return
     except Exception:
         pass
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_seen(request, project_id):
+    room, project, err = _get_room_or_404(project_id, request.user)
+    if err:
+        return err
+
+    message_ids = request.data.get('message_ids', [])
+    if not isinstance(message_ids, list):
+        return Response({'error': 'message_ids must be a list'}, status=400)
+
+    qs = StandupMessage.objects.filter(room=room, id__in=message_ids)
+    for msg in qs:
+        StandupMessageView.objects.get_or_create(message=msg, viewer=request.user)
+
+    return Response({'success': True, 'marked': qs.count()})

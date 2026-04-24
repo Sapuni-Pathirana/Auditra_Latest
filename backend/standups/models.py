@@ -72,3 +72,14 @@ class StandupMention(models.Model):
     class Meta:
         db_table = 'standup_mentions'
         unique_together = ('message', 'mentioned_user')
+
+
+class StandupMessageView(models.Model):
+    """Tracks which users have seen each standup message."""
+    message = models.ForeignKey(StandupMessage, on_delete=models.CASCADE, related_name='views')
+    viewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='seen_standup_messages')
+    viewed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'standup_message_views'
+        unique_together = ('message', 'viewer')

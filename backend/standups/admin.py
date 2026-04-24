@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import StandupRoom, StandupMessage, StandupMention
+from .models import StandupRoom, StandupMessage, StandupMention, StandupMessageView
 
 
 @admin.register(StandupRoom)
@@ -16,3 +16,9 @@ class StandupMessageAdmin(admin.ModelAdmin):
 @admin.register(StandupMention)
 class StandupMentionAdmin(admin.ModelAdmin):
     list_display = ['message', 'mentioned_user']
+
+
+@admin.register(StandupMessageView)
+class StandupMessageViewAdmin(admin.ModelAdmin):
+    list_display = ['message', 'viewer', 'viewed_at']
+    list_filter = ['viewed_at']

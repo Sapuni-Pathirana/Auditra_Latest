@@ -59,6 +59,38 @@ class ValuationListCreateView(generics.ListCreateAPIView):
             )
         except Exception:
             pass
+        try:
+            project = instance.project
+            actor_name = self.request.user.get_full_name() or self.request.user.username
+            meta = {'valuation_id': instance.id, 'project_id': project.id}
+            title = f'Valuation created — {project.title}'
+
+            # Notify creator
+            send_notification(
+                user=self.request.user,
+                category='valuation',
+                severity='info',
+                title=title,
+                message=f'You created a {instance.get_category_display()} valuation.',
+                meta=meta,
+                action_url=f'/dashboard/projects/{project.id}',
+            )
+
+            # Notify next reviewer if available
+            reviewer = project.assigned_accessor or project.assigned_senior_valuer
+            if reviewer and reviewer != self.request.user:
+                send_notification(
+                    user=reviewer,
+                    category='valuation',
+                    severity='info',
+                    title=title,
+                    message=f'{actor_name} created a {instance.get_category_display()} valuation.',
+                    meta=meta,
+                    action_url=f'/dashboard/projects/{project.id}',
+                    email_subject=title,
+                )
+        except Exception:
+            pass
     
     def create(self, request, *args, **kwargs):
         """Override create to provide better error messages and return full object with id"""
@@ -215,6 +247,34 @@ def upload_submitted_report(request, pk):
 
     valuation.submitted_report = report_file
     valuation.save(update_fields=['submitted_report', 'updated_at'])
+
+    try:
+        project = valuation.project
+        title = f'Valuation report uploaded — {project.title}'
+        meta = {'valuation_id': valuation.id, 'project_id': project.id}
+        send_notification(
+            user=request.user,
+            category='valuation',
+            severity='info',
+            title=title,
+            message='Your generated valuation report was uploaded successfully.',
+            meta=meta,
+            action_url=f'/dashboard/projects/{project.id}',
+        )
+        reviewer = project.assigned_accessor or project.assigned_senior_valuer
+        if reviewer and reviewer != request.user:
+            send_notification(
+                user=reviewer,
+                category='valuation',
+                severity='info',
+                title=title,
+                message='A field officer uploaded a valuation report file for review.',
+                meta=meta,
+                action_url=f'/dashboard/projects/{project.id}',
+                email_subject=title,
+            )
+    except Exception:
+        pass
 
     serializer = ValuationSerializer(valuation, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
@@ -524,6 +584,30 @@ def senior_valuer_submit_proposal(request, pk):
     valuation.save(update_fields=['senior_valuer_comments', 'final_report', 'updated_at'])
     
     logger.info(f'Valuation {valuation.id} proposal submitted by senior valuer {request.user.username}')
+    try:
+        title = f'Senior valuer proposal submitted — {valuation.project.title}'
+        meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
+        send_notification(
+            user=request.user,
+            category='valuation',
+            severity='info',
+            title=title,
+            message='Your proposal details were saved successfully.',
+            meta=meta,
+            action_url=f'/dashboard/projects/{valuation.project.id}',
+        )
+        if valuation.field_officer and valuation.field_officer != request.user:
+            send_notification(
+                user=valuation.field_officer,
+                category='valuation',
+                severity='info',
+                title=title,
+                message='A senior valuer submitted proposal details for your valuation.',
+                meta=meta,
+                action_url=f'/dashboard/projects/{valuation.project.id}',
+            )
+    except Exception:
+        pass
     
     serializer = ValuationSerializer(valuation, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
@@ -807,6 +891,42 @@ def md_gm_approve_valuation(request, pk):
             ip_address=get_client_ip(request),
             metadata={'valuation_id': valuation.id, 'project_id': valuation.project.id},
         )
+    except Exception:
+        pass
+    try:
+        meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
+        title = f'Valuation approved by MD/GM — {valuation.project.title}'
+
+        # Actor
+        send_notification(
+            user=request.user,
+            category='valuation',
+            severity='success',
+            title=title,
+            message='You approved this valuation.',
+            meta=meta,
+            action_url=f'/dashboard/projects/{valuation.project.id}',
+        )
+
+        # Stakeholders
+        stakeholders = [
+            valuation.field_officer,
+            valuation.project.assigned_senior_valuer,
+            valuation.project.assigned_accessor,
+            valuation.project.coordinator,
+        ]
+        for u in stakeholders:
+            if u and u != request.user:
+                send_notification(
+                    user=u,
+                    category='valuation',
+                    severity='success',
+                    title=title,
+                    message='A valuation has received final MD/GM approval.',
+                    meta=meta,
+                    action_url=f'/dashboard/projects/{valuation.project.id}',
+                    email_subject=title,
+                )
     except Exception:
         pass
 
