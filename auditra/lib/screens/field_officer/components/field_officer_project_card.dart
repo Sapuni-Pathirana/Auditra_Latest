@@ -33,15 +33,16 @@ class FieldOfficerProjectCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final priority = project.priority ?? 'medium';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0D47A1).withOpacity(0.08),
+            color: Colors.black.withOpacity(isDark ? 0.28 : 0.08),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -115,7 +116,7 @@ class FieldOfficerProjectCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF5F7FA),
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF5F7FA),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -139,10 +140,10 @@ class FieldOfficerProjectCard extends StatelessWidget {
                                   ),
                                   Text(
                                     project.coordinatorName ?? project.coordinatorUsername,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFF333333),
+                                      color: isDark ? Colors.white : const Color(0xFF333333),
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -172,7 +173,7 @@ class FieldOfficerProjectCard extends StatelessWidget {
                                 _formatNextVisitLine(project.nextScheduledVisit),
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.grey[800],
+                                  color: isDark ? Colors.grey[200] : Colors.grey[800],
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -195,8 +196,8 @@ class FieldOfficerProjectCard extends StatelessWidget {
                         icon: Icons.info_outline_rounded,
                         label: 'Details',
                         color: Colors.grey[800]!,
-                        backgroundColor: Colors.white,
-                        borderColor: Colors.grey[300]!,
+                        backgroundColor: Theme.of(context).cardColor,
+                        borderColor: isDark ? const Color(0xFF334155) : Colors.grey[300]!,
                         onTap: () => onViewDetails(project),
                       ),
                     ),

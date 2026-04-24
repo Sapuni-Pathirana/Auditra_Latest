@@ -281,8 +281,10 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Submit Project'),
-        content: Text('Are you sure you want to submit "${project.title}" to the accessor for review?'),
+        title: const Text('Submit to Accessor'),
+        content: Text(
+          'Submit draft valuation report(s) for "${project.title}" to the accessor for review?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -302,13 +304,51 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
       });
 
       try {
-        final result = await ApiService.submitProject(project.id);
-        
-        if (mounted) {
-          if (result['success']) {
+        // Pull latest project details so we submit the newest draft/rejected valuations.
+        final projectRes = await ApiService.getProject(project.id);
+        if (projectRes['success'] != true) {
+          throw Exception(projectRes['message'] ?? 'Failed to load latest project details');
+        }
+        final latestProject = Project.fromJson(projectRes['data']);
+        final valuationsToSubmit = latestProject.valuations
+            .where((v) => v.status == 'draft' || v.status == 'rejected')
+            .toList();
+
+        if (valuationsToSubmit.isEmpty) {
+          if (mounted) {
+            setState(() => _isLoadingProjects = false);
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Project submitted to accessor successfully'),
+                content: Text('No draft reports to submit. Create or edit a valuation report first.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+
+        int successCount = 0;
+        int failedCount = 0;
+        String? firstError;
+        for (final valuation in valuationsToSubmit) {
+          final submitRes = await ApiService.submitValuation(valuation.id);
+          if (submitRes['success'] == true) {
+            successCount++;
+          } else {
+            failedCount++;
+            firstError ??= (submitRes['message'] ?? '').toString();
+          }
+        }
+        
+        if (mounted) {
+          if (failedCount == 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  successCount == 1
+                      ? '1 valuation report submitted to accessor successfully'
+                      : '$successCount valuation reports submitted to accessor successfully',
+                ),
                 backgroundColor: Colors.green,
               ),
             );
@@ -318,7 +358,11 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
             setState(() => _isLoadingProjects = false);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Failed to submit project: ${result['message']}'),
+                content: Text(
+                  successCount > 0
+                      ? '$successCount submitted, $failedCount failed. ${firstError ?? ""}'.trim()
+                      : 'Failed to submit reports: ${firstError ?? "Unknown error"}',
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -671,8 +715,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
@@ -752,7 +797,7 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
                 indicatorColor: Colors.white,
                 indicatorWeight: 3,
                 labelColor: Colors.white,
-                unselectedLabelColor: Colors.blue[100],
+                unselectedLabelColor: isDark ? Colors.blueGrey[100] : Colors.blue[100],
                 labelStyle: const TextStyle(fontWeight: FontWeight.bold),
                 tabs: const [
                   Tab(text: 'Profile & Attendance'),
@@ -791,7 +836,7 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            color: Colors.white,
+            color: Theme.of(context).cardColor,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -799,7 +844,7 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
                 children: [
                   const Text(
                     'Quick Actions',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.text),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   _buildQuickActionTile(

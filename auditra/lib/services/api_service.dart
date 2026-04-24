@@ -1798,14 +1798,36 @@ class ApiService {
       }
 
       final response = await http.post(
-        Uri.parse('$baseUrl/projects/$projectId/submit/'),
+        Uri.parse('$baseUrl/projects/$projectId/start-project/'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
       );
 
-      final data = jsonDecode(response.body);
+      // Guard against Django HTML error pages (404/500) to avoid FormatException
+      final body = response.body.trim();
+      if (body.startsWith('<!DOCTYPE') || body.startsWith('<html')) {
+        return {
+          'success': false,
+          'message': 'Server returned HTML. Submit endpoint may be missing or backend has an error.',
+        };
+      }
+
+      Map<String, dynamic> data = {};
+      if (body.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(body);
+          if (decoded is Map<String, dynamic>) {
+            data = decoded;
+          }
+        } catch (_) {
+          return {
+            'success': false,
+            'message': 'Invalid response from server while submitting project.',
+          };
+        }
+      }
 
       if (response.statusCode == 200) {
         return {'success': true, 'data': data};

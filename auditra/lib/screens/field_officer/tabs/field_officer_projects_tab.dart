@@ -88,6 +88,7 @@ class _FieldOfficerProjectsTabState extends State<FieldOfficerProjectsTab> {
   @override
   Widget build(BuildContext context) {
     final filteredProjects = _filterAndSortProjects(widget.projects);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
@@ -119,7 +120,7 @@ class _FieldOfficerProjectsTabState extends State<FieldOfficerProjectsTab> {
                     // Search and Sort Bar
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      color: Colors.white,
+                      color: Theme.of(context).cardColor,
                       child: Row(
                         children: [
                           // Search field
@@ -138,7 +139,7 @@ class _FieldOfficerProjectsTabState extends State<FieldOfficerProjectsTab> {
                                       )
                                     : null,
                                 filled: true,
-                                fillColor: Colors.grey[100],
+                                fillColor: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide.none,
@@ -153,9 +154,16 @@ class _FieldOfficerProjectsTabState extends State<FieldOfficerProjectsTab> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
-                              color: FieldOfficerStyles.lightBlue.withOpacity(0.1),
+                              color: isDark
+                                  ? const Color(0xFF1E293B)
+                                  : FieldOfficerStyles.lightBlue.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: FieldOfficerStyles.lightBlue.withOpacity(0.5), width: 1.5),
+                              border: Border.all(
+                                color: isDark
+                                    ? const Color(0xFF334155)
+                                    : FieldOfficerStyles.lightBlue.withOpacity(0.5),
+                                width: 1.5,
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
