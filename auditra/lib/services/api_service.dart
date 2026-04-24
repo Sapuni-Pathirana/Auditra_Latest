@@ -954,6 +954,21 @@ class ApiService {
           : 'Failed to load valuation dates';
       return {'success': false, 'message': message.toString()};
     } catch (e) {
+      final errorText = e.toString();
+      final isNetworkError =
+          e is SocketException ||
+          errorText.contains('ClientException') ||
+          errorText.contains('Connection failed') ||
+          errorText.contains('Connection refused') ||
+          errorText.contains('Failed host lookup') ||
+          errorText.contains('Network is unreachable') ||
+          errorText.contains('timed out');
+      if (isNetworkError) {
+        return {
+          'success': false,
+          'message': 'You are offline. Connect to the internet to load valuation dates.',
+        };
+      }
       return {'success': false, 'message': 'Connection error: $e'};
     }
   }

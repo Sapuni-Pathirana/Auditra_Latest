@@ -297,6 +297,38 @@ class OfflineStorageService {
     await box.clear();
   }
 
+  /// Cache project visits for offline access by project id.
+  static Future<void> cacheProjectVisits(
+    int projectId,
+    List<Map<String, dynamic>> visits,
+  ) async {
+    if (!await OfflineDBService.isOfflineModeEnabled()) {
+      return;
+    }
+    if (!OfflineDBService.isInitialized) {
+      await OfflineDBService.initOfflineDB();
+    }
+    final box = OfflineDBService.projectsCacheBox;
+    await box.put('project_visits_$projectId', visits);
+    await box.put(
+      'project_visits_last_updated_$projectId',
+      DateTime.now().toIso8601String(),
+    );
+  }
+
+  /// Get cached project visits by project id.
+  static List<Map<String, dynamic>>? getCachedProjectVisits(int projectId) {
+    if (!OfflineDBService.isInitialized) return null;
+    try {
+      final box = OfflineDBService.projectsCacheBox;
+      final raw = box.get('project_visits_$projectId') as List<dynamic>?;
+      if (raw == null) return null;
+      return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Save attendance offline
   static Future<String> saveAttendanceOffline(Map<String, dynamic> attendanceData) async {
     if (!await OfflineDBService.isOfflineModeEnabled()) {

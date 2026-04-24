@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/offline_db_service.dart';
+import '../services/offline_storage_service.dart';
 import '../theme/app_colors.dart';
 
 class VisitSchedulingScreen extends StatefulWidget {
@@ -35,7 +37,24 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCachedVisitsOnStartup();
     _loadVisits();
+  }
+
+  Future<void> _loadCachedVisitsOnStartup() async {
+    try {
+      await OfflineDBService.initOfflineDB();
+      final cached = OfflineStorageService.getCachedProjectVisits(widget.projectId);
+      if (!mounted) return;
+      if (cached != null && cached.isNotEmpty) {
+        setState(() {
+          _visits = cached;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      // best effort only
+    }
   }
 
   Future<void> _loadVisits() async {
@@ -45,19 +64,48 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
       if (res['success'] == true) {
         final raw = res['data'];
         final data = raw is List ? raw : <dynamic>[];
+        final normalized = List<Map<String, dynamic>>.from(data);
+        OfflineStorageService.cacheProjectVisits(widget.projectId, normalized);
         setState(() {
-          _visits = List<Map<String, dynamic>>.from(data);
+          _visits = normalized;
           _loading = false;
         });
       } else {
-        setState(() {
-          _error = (res['message'] ?? 'Failed to load valuation dates').toString();
-          _loading = false;
-        });
+        final cached = OfflineStorageService.getCachedProjectVisits(widget.projectId);
+        if (cached != null && cached.isNotEmpty) {
+          setState(() {
+            _visits = cached;
+            _loading = false;
+            _error = null;
+          });
+        } else {
+          setState(() {
+            _error = (res['message'] ?? 'Failed to load valuation dates').toString();
+            _loading = false;
+          });
+        }
       }
     } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+      final cached = OfflineStorageService.getCachedProjectVisits(widget.projectId);
+      if (cached != null && cached.isNotEmpty) {
+        setState(() {
+          _visits = cached;
+          _loading = false;
+          _error = null;
+        });
+      } else {
+        setState(() { _error = e.toString(); _loading = false; });
+      }
     }
+  }
+
+  bool _isOfflineMessage(String? message) {
+    if (message == null) return false;
+    final m = message.toLowerCase();
+    return m.contains('you are offline') ||
+        m.contains('network is unreachable') ||
+        m.contains('connection failed') ||
+        m.contains('failed host lookup');
   }
 
   Future<void> _scheduleVisit() async {
@@ -292,11 +340,38 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
           : _error != null
               ? Center(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.error),
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF3E0),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Icon(
+                            _isOfflineMessage(_error)
+                                ? Icons.cloud_off_rounded
+                                : Icons.error_outline_rounded,
+                            color: _isOfflineMessage(_error) ? Colors.orange : AppColors.error,
+                            size: 34,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          _isOfflineMessage(_error)
+                              ? 'You are offline. Saved valuation dates will appear once internet is back.'
+                              : _error!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _isOfflineMessage(_error) ? const Color(0xFF8D6E63) : AppColors.error,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 )
