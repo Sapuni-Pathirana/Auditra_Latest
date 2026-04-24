@@ -13,6 +13,7 @@ import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import ProjectDetailsFields from '../../components/ProjectDetailsFields';
 import { extractApiErrorMessage, formatFileSize } from '../../utils/helpers';
+import { useDocumentManagement } from '../../hooks/useDocumentManagement';
 
 export default function EditProject() {
   const { id } = useParams();
@@ -30,11 +31,20 @@ export default function EditProject() {
     estimated_value: '',
   });
 
-  // Document states
-  const [existingDocuments, setExistingDocuments] = useState([]);
-  const [stagedDocuments, setStagedDocuments] = useState([]);
-  const [uploadingDocs, setUploadingDocs] = useState(false);
-  const [deletingDocId, setDeletingDocId] = useState(null);
+  // Use document management hook
+  const {
+    stagedDocuments,
+    existingDocuments,
+    uploadingDocs,
+    deletingDocId,
+    error: docError,
+    handleAddDocument,
+    handleRemoveStagedDoc,
+    handleUploadNewDocuments,
+    handleDeleteDocument,
+    initializeDocuments,
+    setError: setDocError,
+  } = useDocumentManagement(id);
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -49,7 +59,7 @@ export default function EditProject() {
           end_date: p.end_date || '',
           estimated_value: p.estimated_value || '',
         });
-        setExistingDocuments(p.documents || []);
+        initializeDocuments(p.documents || []);
       } catch {
         setError('Failed to load project');
       } finally {
@@ -57,61 +67,10 @@ export default function EditProject() {
       }
     };
     fetchProject();
-  }, [id]);
+  }, [id, initializeDocuments]);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  // Document handlers
-  const handleAddDocument = (e) => {
-    const files = Array.from(e.target.files);
-    const newDocs = files.map(file => ({
-      file,
-      name: file.name.replace(/\.[^/.]+$/, ''),
-      id: crypto.randomUUID(),
-    }));
-    setStagedDocuments(prev => [...prev, ...newDocs]);
-    e.target.value = '';
-  };
-
-  const handleRemoveStagedDoc = (docId) => {
-    setStagedDocuments(prev => prev.filter(d => d.id !== docId));
-  };
-
-  const handleUploadNewDocuments = async () => {
-    if (stagedDocuments.length === 0) return;
-    setUploadingDocs(true);
-    setError('');
-    for (const doc of stagedDocuments) {
-      try {
-        await projectService.uploadDocument({
-          project: id,
-          file: doc.file,
-          name: doc.name,
-        });
-      } catch {
-        setError(`Failed to upload: ${doc.name}`);
-      }
-    }
-    setStagedDocuments([]);
-    try {
-      const res = await projectService.getProject(id);
-      setExistingDocuments(res.data.documents || []);
-    } catch {}
-    setUploadingDocs(false);
-  };
-
-  const handleDeleteDocument = async (docId) => {
-    setDeletingDocId(docId);
-    setError('');
-    try {
-      await projectService.deleteDocument(docId);
-      setExistingDocuments(prev => prev.filter(d => d.id !== docId));
-    } catch {
-      setError('Failed to delete document');
-    } finally {
-      setDeletingDocId(null);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -155,7 +114,7 @@ export default function EditProject() {
         Back to Project
       </Button>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Edit Project</Typography>
-      {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-line' }}>{error}</Alert>}
+      {(error || docError) && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-line' }}>{error || docError}</Alert>}
       <form onSubmit={handleSubmit}>
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 3 }}>

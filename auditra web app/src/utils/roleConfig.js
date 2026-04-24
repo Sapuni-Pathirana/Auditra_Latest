@@ -113,11 +113,36 @@ export const roleMenuConfig = {
   ],
 };
 
+const ROLE_ALIASES = {
+  'field officer': 'field_officer',
+  'field-officer': 'field_officer',
+  fieldofficer: 'field_officer',
+  assessor: 'accessor',
+  'senior valuer': 'senior_valuer',
+  'senior-valuer': 'senior_valuer',
+  seniorvaluer: 'senior_valuer',
+  'md/gm': 'md_gm',
+  'md-gm': 'md_gm',
+  mdgm: 'md_gm',
+};
+
+export const normalizeRoleKey = (role) => {
+  if (!role || typeof role !== 'string') return role;
+  return role.trim().toLowerCase().replace(/[\s-]+/g, '_');
+};
+
+export const resolveRoleKey = (role) => {
+  if (!role || typeof role !== 'string') return role;
+  const normalized = normalizeRoleKey(role);
+  return ROLE_ALIASES[normalized] || ROLE_ALIASES[role.trim().toLowerCase()] || normalized;
+};
+
 export const getRoleDashboardPath = (role) => {
   return '/dashboard';
 };
 
 export const getRoleLabel = (role) => {
+  const resolvedRole = resolveRoleKey(role);
   const labels = {
     admin: 'Admin',
     coordinator: 'Coordinator',
@@ -131,5 +156,5 @@ export const getRoleLabel = (role) => {
     agent: 'Agent',
     unassigned: 'Unassigned',
   };
-  return labels[role] || role;
+  return labels[resolvedRole] || role;
 };

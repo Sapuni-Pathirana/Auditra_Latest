@@ -1,10 +1,12 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Box, CircularProgress } from '@mui/material';
+import { resolveRoleKey } from '../utils/roleConfig';
 
 export default function ProtectedRoute({ children, allowedRoles }) {
   const { isAuthenticated, role, passwordChanged, loading } = useAuth();
   const location = useLocation();
+  const resolvedRole = resolveRoleKey(role);
 
   if (loading) {
     return (
@@ -24,7 +26,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/dashboard/force-change-password" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(role)) {
+  if (allowedRoles && !allowedRoles.includes(resolvedRole)) {
     return <Navigate to="/dashboard" replace />;
   }
 

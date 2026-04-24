@@ -14,6 +14,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import projectService from '../../services/projectService';
 import ProjectDetailsFields from '../../components/ProjectDetailsFields';
 import { extractApiErrorMessage } from '../../utils/helpers';
+import { useDocumentManagement } from '../../hooks/useDocumentManagement';
 
 export default function CreateProject() {
   const navigate = useNavigate();
@@ -53,10 +54,15 @@ export default function CreateProject() {
   const [agentEmailStatus, setAgentEmailStatus] = useState(null);
   const [agentEmailMessage, setAgentEmailMessage] = useState('');
 
-  // Document staging states
-  const [stagedDocuments, setStagedDocuments] = useState([]);
-  const [uploadingDocs, setUploadingDocs] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState('');
+  // Use document management hook (projectId will be set after project creation)
+  const {
+    stagedDocuments,
+    uploadingDocs,
+    error: docError,
+    handleAddDocument,
+    handleRemoveStagedDoc,
+    handleDocNameChange,
+  } = useDocumentManagement(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -186,28 +192,6 @@ export default function CreateProject() {
     return undefined;
   };
 
-  // Document handlers
-  const handleAddDocument = (e) => {
-    const files = Array.from(e.target.files);
-    const newDocs = files.map(file => ({
-      file,
-      name: file.name.replace(/\.[^/.]+$/, ''),
-      id: crypto.randomUUID(),
-    }));
-    setStagedDocuments(prev => [...prev, ...newDocs]);
-    e.target.value = '';
-  };
-
-  const handleDocNameChange = (docId, newName) => {
-    setStagedDocuments(prev =>
-      prev.map(d => d.id === docId ? { ...d, name: newName } : d)
-    );
-  };
-
-  const handleRemoveStagedDoc = (docId) => {
-    setStagedDocuments(prev => prev.filter(d => d.id !== docId));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -259,10 +243,8 @@ export default function CreateProject() {
 
       // Upload staged documents sequentially
       if (stagedDocuments.length > 0) {
-        setUploadingDocs(true);
         for (let i = 0; i < stagedDocuments.length; i++) {
           const doc = stagedDocuments[i];
-          setUploadProgress(`Uploading document ${i + 1} of ${stagedDocuments.length}: ${doc.name}`);
           try {
             await projectService.uploadDocument({
               project: newProjectId,
@@ -273,8 +255,6 @@ export default function CreateProject() {
             console.error(`Failed to upload document: ${doc.name}`, uploadErr);
           }
         }
-        setUploadingDocs(false);
-        setUploadProgress('');
       }
 
       navigate('/dashboard/projects');
@@ -313,6 +293,7 @@ export default function CreateProject() {
         </Alert>
       )}
       {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-line' }}>{error}</Alert>}
+      {docError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-line' }}>{docError}</Alert>}
       <form onSubmit={handleSubmit}>
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 3 }}>
@@ -519,7 +500,6 @@ export default function CreateProject() {
 
             {uploadingDocs && (
               <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{uploadProgress}</Typography>
                 <LinearProgress />
               </Box>
             )}

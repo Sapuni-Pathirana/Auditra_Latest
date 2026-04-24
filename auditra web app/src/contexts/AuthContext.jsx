@@ -1,8 +1,14 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axiosClient from '../api/axiosClient';
 import realtimeSocket from '../services/realtimeSocket';
+import { resolveRoleKey } from '../utils/roleConfig';
 
 const AuthContext = createContext(null);
+
+function normalizeRole(roleValue) {
+  if (!roleValue || typeof roleValue !== 'string') return roleValue;
+  return roleValue.trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -34,7 +40,7 @@ export function AuthProvider({ children }) {
 
       const userData = { ...profileRes.data, profile_image_url: profileImageUrl };
       setUser(userData);
-      setRole(roleRes.data.role);
+      setRole(resolveRoleKey(normalizeRole(roleRes.data.role)));
       setPasswordChanged(pwChanged);
 
       // Init WebSocket

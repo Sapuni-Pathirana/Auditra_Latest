@@ -7,6 +7,7 @@ import { Search, Folder, AttachFile } from '@mui/icons-material';
 import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
+import ProjectsTabFilters from '../../components/ProjectsTabFilters';
 import { formatDate, getPriorityColor, capitalize } from '../../utils/helpers';
 
 const STATUS_TAB_MAP = { pending: 1, in_progress: 2, completed: 3 };
@@ -49,16 +50,21 @@ export default function MyProjects() {
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>My Projects</Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label={`All (${projects.length})`} />
-        <Tab label={`Pending (${projects.filter(p => p.status === 'pending').length})`} />
-        <Tab label={`In Progress (${projects.filter(p => p.status === 'in_progress').length})`} />
-        <Tab label={`Completed (${projects.filter(p => p.status === 'completed').length})`} />
-      </Tabs>
-
-      <TextField fullWidth placeholder="Search projects..." value={search} onChange={(e) => setSearch(e.target.value)}
-        InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
-        sx={{ mb: 3 }} size="small" />
+      <ProjectsTabFilters
+        tab={tab}
+        onTabChange={setTab}
+        tabs={[
+          { key: 'all', label: `All (${projects.length})` },
+          { key: 'pending', label: `Pending (${projects.filter(p => p.status === 'pending').length})` },
+          { key: 'in_progress', label: `In Progress (${projects.filter(p => p.status === 'in_progress').length})` },
+          { key: 'completed', label: `Completed (${projects.filter(p => p.status === 'completed').length})` },
+        ]}
+        tabsSx={{ mb: 2 }}
+        search={search}
+        onSearchChange={setSearch}
+        searchSx={{ mb: 3 }}
+        searchSize="small"
+      />
 
       {filtered.length === 0 ? (
         <Card><CardContent><Typography color="text.secondary" align="center">No projects found</Typography></CardContent></Card>

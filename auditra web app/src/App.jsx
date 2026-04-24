@@ -79,14 +79,15 @@ import AgentCommissionReports from './pages/agent/AgentCommissionReports';
 // Unassigned
 import UnassignedDashboard from './pages/unassigned/UnassignedDashboard';
 
-import { roleMenuConfig } from './utils/roleConfig';
+import { roleMenuConfig, resolveRoleKey } from './utils/roleConfig';
 
 // Role-based dashboard component — redirects to the first visible sidebar tab
 function RoleDashboard() {
   const { role } = useAuth();
+  const resolvedRole = resolveRoleKey(role);
 
   // Get the menu items for this role
-  const menuItems = roleMenuConfig[role] || roleMenuConfig.unassigned;
+  const menuItems = roleMenuConfig[resolvedRole] || roleMenuConfig.unassigned;
 
   // If the first menu item path is not /dashboard, redirect there
   if (menuItems.length > 0 && menuItems[0].path !== '/dashboard') {
@@ -94,7 +95,7 @@ function RoleDashboard() {
   }
 
   // For roles whose first item IS /dashboard, render the appropriate content
-  switch (role) {
+  switch (resolvedRole) {
     case 'admin':
       return <AdminDashboard />;
     case 'hr_head':

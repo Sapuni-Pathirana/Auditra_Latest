@@ -157,11 +157,11 @@ cd backend
 
 # Create virtual environment
 python -m venv venv
-venv\Scripts\activate        # Windows
+venv\Scripts\activate.psl     # Windows
 # source venv/bin/activate   # macOS/Linux
 
 # Install dependencies
-pip install -r requirements.txt
+
 
 # Configure environment (see Environment Variables)
 # Run migrations
@@ -174,7 +174,7 @@ python manage.py createsuperuser
 daphne auditra_backend.asgi:application
 
 # Start Celery worker (background tasks)
-celery -A auditra_backend worker -l info
+celery -A auditra_backend worker -l info --pool=solo
 
 # Start Celery Beat scheduler (reminders)
 celery -A auditra_backend beat -l info
@@ -322,7 +322,7 @@ All WebSocket connections authenticate via `?token=<jwt>` query parameter.
 cd backend && daphne auditra_backend.asgi:application
 
 # Terminal 2 – Celery worker
-cd backend && celery -A auditra_backend worker -l info
+cd backend && celery -A auditra_backend worker -l info --pool=solo
 
 # Terminal 3 – Celery Beat
 cd backend && celery -A auditra_backend beat -l info

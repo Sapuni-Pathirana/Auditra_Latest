@@ -12,7 +12,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import { useAuth } from '../contexts/AuthContext';
-import { roleMenuConfig, getRoleLabel } from '../utils/roleConfig';
+import { roleMenuConfig, getRoleLabel, resolveRoleKey } from '../utils/roleConfig';
 import NotificationDropdown from './NotificationDropdown';
 import UserAvatar from './UserAvatar';
 
@@ -29,7 +29,8 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
 
-  const menuItems = roleMenuConfig[role] || roleMenuConfig.unassigned;
+  const resolvedRole = resolveRoleKey(role);
+  const menuItems = roleMenuConfig[resolvedRole] || roleMenuConfig.unassigned;
   const currentWidth = isMobile ? DRAWER_WIDTH : (collapsed ? DRAWER_COLLAPSED : DRAWER_WIDTH);
   const c = theme.palette.custom;
 

@@ -2445,16 +2445,6 @@ class StartProjectView(APIView):
             )
         except Exception:
             pass
-        _notify_project_users(
-            [report.agent],
-            category='project',
-            severity='info',
-            title=f'Commission report sent — {report.project.title}',
-            message='Your commission report has been sent to your email.',
-            meta={'project_id': report.project.id, 'report_id': report.id},
-            action_url=f'/dashboard/projects/{report.project.id}',
-            actor=request.user,
-        )
 
         return Response({
             'success': True,

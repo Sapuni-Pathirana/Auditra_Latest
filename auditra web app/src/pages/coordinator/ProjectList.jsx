@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Box, Typography, Tabs, Tab, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Button, TextField, InputAdornment, Alert, Chip,
-  Tooltip,
+  Box, Typography, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Paper, Button, Alert, Chip,
 } from '@mui/material';
-import { Search, Add, Visibility } from '@mui/icons-material';
+import { Add, Visibility } from '@mui/icons-material';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
 import PriorityChip from '../../components/PriorityChip';
+import ProjectsTabFilters from '../../components/ProjectsTabFilters';
 import { useAuth } from '../../contexts/AuthContext';
 import useCoordinatorProjects from '../../hooks/useCoordinatorProjects';
 
@@ -58,22 +58,27 @@ export default function ProjectList() {
       </Box>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label={`All (${projects.length})`} />
-        <Tab label={`Pending (${projects.filter(p => p.status === 'pending').length})`} />
-        <Tab label={`In Progress (${projects.filter(p => p.status === 'in_progress').length})`} />
-        <Tab label={`Completed (${projects.filter(p => p.status === 'completed').length})`} />
-      </Tabs>
-
-      <TextField fullWidth placeholder="Search projects..." value={search} onChange={(e) => setSearch(e.target.value)}
-        InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
-        sx={{ mb: 2 }} size="small" />
+      <ProjectsTabFilters
+        tab={tab}
+        onTabChange={setTab}
+        tabs={[
+          { key: 'all', label: `All (${projects.length})` },
+          { key: 'pending', label: `Pending (${projects.filter(p => p.status === 'pending').length})` },
+          { key: 'in_progress', label: `In Progress (${projects.filter(p => p.status === 'in_progress').length})` },
+          { key: 'completed', label: `Completed (${projects.filter(p => p.status === 'completed').length})` },
+        ]}
+        tabsSx={{ mb: 2 }}
+        search={search}
+        onSearchChange={setSearch}
+        searchSx={{ mb: 2 }}
+        searchSize="small"
+      />
 
       <TableContainer component={Paper}>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell sx={{ textAlign: 'center' }}>Title</TableCell>
+              <TableCell sx={{ textAlign: 'left' }}>Title</TableCell>
               <TableCell sx={{ textAlign: 'center' }}>Priority</TableCell>
               <TableCell sx={{ textAlign: 'center' }}>Status</TableCell>
               <TableCell sx={{ textAlign: 'center' }}>Payment Status</TableCell>
@@ -91,7 +96,7 @@ export default function ProjectList() {
                 
                 return (
                   <TableRow key={p.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/dashboard/projects/${p.id}`)}>
-                    <TableCell sx={{ fontWeight: 600, textAlign: 'center' }}>{p.title}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, textAlign: 'left' }}>{p.title}</TableCell>
                     <TableCell sx={{ textAlign: 'center' }}>
                       <PriorityChip priority={p.priority} />
                     </TableCell>
