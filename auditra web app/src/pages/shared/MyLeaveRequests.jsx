@@ -3,7 +3,7 @@ import {
   Box, Card, CardContent, Typography, Button, Grid, TextField, MenuItem,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Dialog, DialogTitle, DialogContent, DialogActions, Alert, Tabs, Tab,
-  Chip, FormControlLabel, Checkbox, Tooltip, IconButton,
+  Chip, FormControlLabel, Checkbox,
 } from '@mui/material';
 import { Add, Cancel } from '@mui/icons-material';
 import axiosClient from '../../api/axiosClient';
@@ -183,17 +183,21 @@ export default function MyLeaveRequests() {
                   </TableCell>
                   <TableCell>{formatDate(r.start_date)}</TableCell>
                   <TableCell>{formatDate(r.end_date)}</TableCell>
-                  <TableCell>{r.days}</TableCell>
+                  <TableCell>{r.is_half_day ? 'Half Day' : r.days}</TableCell>
                   <TableCell sx={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reason}</TableCell>
                   <TableCell><StatusChip status={r.status} /></TableCell>
-                  <TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
                     {canCancel(r) && (
-                      <Tooltip title="Cancel leave">
-                        <IconButton size="small" color="error"
-                          onClick={() => setCancelDialog({ open: true, id: r.id })}>
-                          <Cancel fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<Cancel fontSize="small" />}
+                        sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 108 }}
+                        onClick={() => setCancelDialog({ open: true, id: r.id })}
+                      >
+                        Cancel
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>
