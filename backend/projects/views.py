@@ -1185,7 +1185,7 @@ class ProjectDocumentDeleteView(generics.DestroyAPIView):
         try:
             from system_logs.utils import log_action, get_client_ip
             log_action(
-                action='DOCUMENT_UPLOADED',
+                action='DOCUMENT_DELETED',
                 user=self.request.user,
                 description=f"Document deleted from project: {project.title} (ID: {project.id})",
                 category='project',
@@ -1194,16 +1194,6 @@ class ProjectDocumentDeleteView(generics.DestroyAPIView):
             )
         except Exception:
             pass
-        _notify_project_users(
-            [project.assigned_agent],
-            category='payment',
-            severity='success',
-            title=f'Agent payment recorded — {project.title}',
-            message=f'Your payment of Rs. {amount:,.2f} has been recorded.',
-            meta={'project_id': project.id, 'amount': str(amount)},
-            action_url=f'/dashboard/projects/{project.id}',
-            actor=request.user,
-        )
 
         # Feature #3 (C1): tell the coordinator when someone else deletes a document.
         try:

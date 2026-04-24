@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Grid, Alert, Card, CardContent, Button } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
@@ -6,29 +5,13 @@ import PendingIcon from '@mui/icons-material/Pending';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
-import projectService from '../../services/projectService';
 import StatsCard from '../../components/StatsCard';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import useCoordinatorProjects from '../../hooks/useCoordinatorProjects';
 
 export default function CoordinatorDashboard() {
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { projects, loading, error } = useCoordinatorProjects();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        const res = await projectService.getProjects();
-        setProjects(Array.isArray(res.data) ? res.data : res.data?.results || []);
-      } catch {
-        setError('Failed to load projects');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProjects();
-  }, []);
 
   if (loading) return <LoadingSpinner />;
 

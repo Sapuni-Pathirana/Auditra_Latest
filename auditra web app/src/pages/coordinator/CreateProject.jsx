@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Box, Typography, Card, CardContent, TextField, Button, Grid, Alert, MenuItem,
+  Box, Typography, Card, CardContent, TextField, Button, Grid, Alert,
   CircularProgress, InputAdornment, IconButton, LinearProgress,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -12,6 +12,8 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DescriptionIcon from '@mui/icons-material/Description';
 import projectService from '../../services/projectService';
+import ProjectDetailsFields from '../../components/ProjectDetailsFields';
+import { extractApiErrorMessage } from '../../utils/helpers';
 
 export default function CreateProject() {
   const navigate = useNavigate();
@@ -277,31 +279,14 @@ export default function CreateProject() {
 
       navigate('/dashboard/projects');
     } catch (err) {
-      const data = err.response?.data;
-      if (data && typeof data === 'object') {
-        // Handle different error formats
-        if (data.error) {
-          setError(data.error);
-        } else if (data.detail) {
-          setError(data.detail);
-        } else if (data.message) {
-          setError(data.message);
-        } else {
-          const msgs = Object.entries(data).map(([k, v]) => {
-            const fieldName = k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            const message = Array.isArray(v) ? v.join(', ') : v;
-            return `${fieldName}: ${message}`;
-          });
-          setError(msgs.join('\n'));
-        }
-      } else if (err.response?.status === 400) {
+      if (err.response?.status === 400) {
         setError('Invalid data provided. Please check all fields.');
       } else if (err.response?.status === 403) {
         setError('You do not have permission to create projects.');
       } else if (err.response?.status === 500) {
         setError('Server error. Please try again later.');
       } else {
-        setError(err.message || 'Failed to create project');
+        setError(extractApiErrorMessage(err, 'Failed to create project'));
       }
     } finally {
       setLoading(false);
@@ -332,64 +317,21 @@ export default function CreateProject() {
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Project Details</Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12}><TextField fullWidth label="Project Title" name="title" value={form.title} onChange={handleChange} required /></Grid>
-              <Grid item xs={12}><TextField fullWidth label="Description" name="description" value={form.description} onChange={handleChange} multiline rows={3} required /></Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField select fullWidth label="Priority" name="priority" value={form.priority} onChange={handleChange}>
-                  <MenuItem value="urgent">Urgent</MenuItem>
-                  <MenuItem value="high">High</MenuItem>
-                  <MenuItem value="medium">Medium</MenuItem>
-                  <MenuItem value="low">Low</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="Start Date"
-                  name="start_date"
-                  type="date"
-                  value={form.start_date}
-                  onChange={handleChange}
-                  InputLabelProps={{ shrink: true }}
-                  inputProps={{ min: today }}
-                  required
-                  error={!!formErrors.start_date}
-                  helperText={formErrors.start_date}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="End Date"
-                  name="end_date"
-                  type="date"
-                  value={form.end_date}
-                  onChange={handleChange}
-                  InputLabelProps={{ shrink: true }}
-                  inputProps={{ min: form.start_date || today }}
-                  required
-                  error={!!formErrors.end_date}
-                  helperText={formErrors.end_date}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="Estimated Value (LKR)"
-                  name="estimated_value"
-                  type="number"
-                  value={form.estimated_value}
-                  onChange={handleChange}
-                  required
-                  error={!!formErrors.estimated_value}
-                  helperText={formErrors.estimated_value || 'Client must pay this amount before project starts'}
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start">Rs.</InputAdornment>,
-                  }}
-                  inputProps={{ min: 1 }}
-                /></Grid>
-            </Grid>
+            <ProjectDetailsFields
+              form={form}
+              onChange={handleChange}
+              startDateRequired
+              endDateRequired
+              startDateMin={today}
+              endDateMin={form.start_date || today}
+              startDateError={formErrors.start_date}
+              startDateHelperText={formErrors.start_date}
+              endDateError={formErrors.end_date}
+              endDateHelperText={formErrors.end_date}
+              estimatedValueError={formErrors.estimated_value}
+              estimatedValueHelperText={formErrors.estimated_value || 'Client must pay this amount before project starts'}
+              estimatedValueMin={1}
+            />
           </CardContent>
         </Card>
         <Card sx={{ mb: 3 }}>

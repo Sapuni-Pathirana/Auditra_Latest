@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Box, Typography, Card, CardContent, TextField, Button, Grid, Alert, MenuItem,
-  InputAdornment, IconButton, LinearProgress, Divider, Tooltip,
+  Box, Typography, Card, CardContent, Button, Alert,
+  IconButton, LinearProgress, Divider, Tooltip,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -11,6 +11,8 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import ProjectDetailsFields from '../../components/ProjectDetailsFields';
+import { extractApiErrorMessage, formatFileSize } from '../../utils/helpers';
 
 export default function EditProject() {
   const { id } = useParams();
@@ -111,13 +113,6 @@ export default function EditProject() {
     }
   };
 
-  const formatFileSize = (bytes) => {
-    if (!bytes) return '-';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -146,25 +141,7 @@ export default function EditProject() {
       await projectService.updateProject(id, payload);
       navigate(`/dashboard/projects/${id}`);
     } catch (err) {
-      const data = err.response?.data;
-      if (data && typeof data === 'object') {
-        if (data.error) {
-          setError(data.error);
-        } else if (data.detail) {
-          setError(data.detail);
-        } else if (data.message) {
-          setError(data.message);
-        } else {
-          const msgs = Object.entries(data).map(([k, v]) => {
-            const fieldName = k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            const message = Array.isArray(v) ? v.join(', ') : v;
-            return `${fieldName}: ${message}`;
-          });
-          setError(msgs.join('\n'));
-        }
-      } else {
-        setError(err.message || 'Failed to update project');
-      }
+      setError(extractApiErrorMessage(err, 'Failed to update project'));
     } finally {
       setSaving(false);
     }
@@ -183,47 +160,14 @@ export default function EditProject() {
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Project Details</Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12}><TextField fullWidth label="Project Title" name="title" value={form.title} onChange={handleChange} required /></Grid>
-              <Grid item xs={12}><TextField fullWidth label="Description" name="description" value={form.description} onChange={handleChange} multiline rows={3} required /></Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField select fullWidth label="Priority" name="priority" value={form.priority} onChange={handleChange}>
-                  <MenuItem value="urgent">Urgent</MenuItem>
-                  <MenuItem value="high">High</MenuItem>
-                  <MenuItem value="medium">Medium</MenuItem>
-                  <MenuItem value="low">Low</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} sm={4}><TextField fullWidth label="Start Date" name="start_date" type="date" value={form.start_date} onChange={handleChange} InputLabelProps={{ shrink: true }} /></Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="End Date"
-                  name="end_date"
-                  type="date"
-                  value={form.end_date}
-                  onChange={handleChange}
-                  InputLabelProps={{ shrink: true }}
-                  inputProps={{ min: form.start_date || undefined }}
-                  error={form.start_date && form.end_date && new Date(form.end_date) <= new Date(form.start_date)}
-                  helperText={form.start_date && form.end_date && new Date(form.end_date) <= new Date(form.start_date) ? 'End date must be after start date' : ''}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="Estimated Value (LKR)"
-                  name="estimated_value"
-                  type="number"
-                  value={form.estimated_value}
-                  onChange={handleChange}
-                  required
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start">Rs.</InputAdornment>,
-                  }}
-                />
-              </Grid>
-            </Grid>
+            <ProjectDetailsFields
+              form={form}
+              onChange={handleChange}
+              startDateMin={undefined}
+              endDateMin={form.start_date || undefined}
+              endDateError={form.start_date && form.end_date && new Date(form.end_date) <= new Date(form.start_date)}
+              endDateHelperText={form.start_date && form.end_date && new Date(form.end_date) <= new Date(form.start_date) ? 'End date must be after start date' : ''}
+            />
           </CardContent>
         </Card>
 

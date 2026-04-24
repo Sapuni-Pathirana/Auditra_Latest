@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, Fragment } from 'react';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TablePagination, TextField, Chip,
-  Button, InputAdornment, IconButton, CircularProgress, Collapse, Grid,
-  Card, CardContent, Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, InputAdornment, IconButton, CircularProgress, Collapse,
+  Dialog, DialogTitle, DialogContent, DialogActions,
   Snackbar, Alert, Tabs, Tab, Stack,
 } from '@mui/material';
 import {
@@ -13,17 +13,12 @@ import {
   AddCircle as AddCircleIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
-  Person as PersonIcon,
-  Business as BusinessIcon,
-  Email as EmailIcon,
-  Phone as PhoneIcon,
-  Description as DescriptionIcon,
   Assignment as AssignmentIcon,
-  ContactPhone as AgentIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import authService from '../../services/authService';
+import InfoField from '../../components/InfoField';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                         */
@@ -43,55 +38,32 @@ const formatDate = (dateStr) => {
   return `${day}/${month}/${year}`;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Detail field helper                                               */
-/* ------------------------------------------------------------------ */
-const DetailField = ({ label, value }) => (
-  <Box sx={{ mb: 2.5 }}>
-    <Typography
-      variant="caption"
-      sx={{
-        color: 'text.secondary',
-        fontWeight: 600,
-        display: 'block',
-        mb: 0.5,
-        textTransform: 'uppercase',
-        fontSize: '0.65rem',
-        letterSpacing: '0.8px'
-      }}
-    >
-      {label}
-    </Typography>
-    <Typography variant="body1" sx={{ fontWeight: 500, wordBreak: 'break-word', fontSize: '0.95rem' }}>
-      {value || '-'}
-    </Typography>
-  </Box>
-);
+const DETAIL_LABEL_SX = {
+  color: 'text.secondary',
+  fontWeight: 600,
+  display: 'block',
+  mb: 0.5,
+  textTransform: 'uppercase',
+  fontSize: '0.65rem',
+  letterSpacing: '0.8px',
+};
 
-/* ------------------------------------------------------------------ */
-/*  Section Card Component                                            */
-/* ------------------------------------------------------------------ */
-const InfoSection = ({ title, icon: Icon, children, color = 'primary.main' }) => (
-  <Card
-    elevation={0}
-    sx={{
-      height: '100%',
-      bgcolor: 'background.paper',
-      border: '1px solid',
-      borderColor: 'grey.200',
-      borderRadius: 2,
-    }}
-  >
-    <CardContent sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-        <Icon sx={{ color, fontSize: 24 }} />
-        <Typography variant="h6" sx={{ fontWeight: 700, color, fontSize: '1rem' }}>
-          {title}
-        </Typography>
-      </Box>
-      {children}
-    </CardContent>
-  </Card>
+const DETAIL_VALUE_SX = {
+  fontWeight: 500,
+  wordBreak: 'break-word',
+  fontSize: '0.95rem',
+};
+
+const SubmissionInfoField = ({ label, value }) => (
+  <InfoField
+    label={label}
+    value={value}
+    containerSx={{ mb: 2.5 }}
+    labelVariant="caption"
+    labelSx={DETAIL_LABEL_SX}
+    valueVariant="body1"
+    valueSx={DETAIL_VALUE_SX}
+  />
 );
 
 /* ------------------------------------------------------------------ */
@@ -134,10 +106,7 @@ export default function AssignedSubmissions() {
       setSubmissions(res.data.results || []);
       setTotalCount(res.data.count || 0);
       
-      // Also fetch total counts without filter for tab badges
-      const allRes = await axiosClient.get('/auth/client-submissions/', { params: { page: 1, page_size: 1 } });
-      const allSubmissions = allRes.data.results || [];
-      // Get counts from a full fetch
+      // Get counts from a full fetch for tab badges
       const countRes = await axiosClient.get('/auth/client-submissions/', { params: { page_size: 1000 } });
       const allData = countRes.data.results || [];
       setSummaryCounts({
@@ -534,10 +503,10 @@ export default function AssignedSubmissions() {
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main', mb: 2 }}>
                                   Client Information
                                 </Typography>
-                                <DetailField label="Full Name" value={fullName} />
-                                <DetailField label="Email" value={sub.email} />
-                                <DetailField label="Phone" value={sub.phone} />
-                                <DetailField label="NIC" value={sub.nic} />
+                                <SubmissionInfoField label="Full Name" value={fullName} />
+                                <SubmissionInfoField label="Email" value={sub.email} />
+                                <SubmissionInfoField label="Phone" value={sub.phone} />
+                                <SubmissionInfoField label="NIC" value={sub.nic} />
                               </Box>
 
                               {/* Company Details */}
@@ -545,8 +514,8 @@ export default function AssignedSubmissions() {
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main', mb: 2 }}>
                                   Company Details
                                 </Typography>
-                                <DetailField label="Company" value={sub.company_name} />
-                                <DetailField label="Address" value={sub.address} />
+                                <SubmissionInfoField label="Company" value={sub.company_name} />
+                                <SubmissionInfoField label="Address" value={sub.address} />
                               </Box>
 
                               {/* Project Details */}
@@ -554,36 +523,23 @@ export default function AssignedSubmissions() {
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main', mb: 2 }}>
                                   Project Details
                                 </Typography>
-                                <DetailField label="Project Title" value={sub.project_title} />
+                                <SubmissionInfoField label="Project Title" value={sub.project_title} />
                                 <Box sx={{ mb: 2 }}>
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      color: 'text.secondary',
-                                      fontWeight: 600,
-                                      display: 'block',
-                                      mb: 0.5,
-                                      textTransform: 'uppercase',
-                                      fontSize: '0.65rem',
-                                      letterSpacing: '0.8px'
-                                    }}
-                                  >
-                                    Description
-                                  </Typography>
-                                  <Typography
-                                    variant="body1"
-                                    sx={{
-                                      fontWeight: 500,
-                                      fontSize: '0.95rem',
+                                  <InfoField
+                                    label="Description"
+                                    value={sub.project_description}
+                                    labelVariant="caption"
+                                    labelSx={DETAIL_LABEL_SX}
+                                    valueVariant="body1"
+                                    valueSx={{
+                                      ...DETAIL_VALUE_SX,
                                       bgcolor: 'background.paper',
                                       p: 1.5,
                                       borderRadius: 1,
                                       border: '1px solid',
                                       borderColor: 'divider',
                                     }}
-                                  >
-                                    {sub.project_description || '-'}
-                                  </Typography>
+                                  />
                                 </Box>
                               </Box>
 
@@ -594,9 +550,9 @@ export default function AssignedSubmissions() {
                                 </Typography>
                                 {sub.agent_name || sub.agent_email || sub.agent_phone ? (
                                   <>
-                                    <DetailField label="Agent Name" value={sub.agent_name || 'Not provided'} />
-                                    <DetailField label="Agent Email" value={sub.agent_email || 'Not provided'} />
-                                    <DetailField label="Agent Phone" value={sub.agent_phone || 'Not provided'} />
+                                    <SubmissionInfoField label="Agent Name" value={sub.agent_name || 'Not provided'} />
+                                    <SubmissionInfoField label="Agent Email" value={sub.agent_email || 'Not provided'} />
+                                    <SubmissionInfoField label="Agent Phone" value={sub.agent_phone || 'Not provided'} />
                                   </>
                                 ) : (
                                   <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>

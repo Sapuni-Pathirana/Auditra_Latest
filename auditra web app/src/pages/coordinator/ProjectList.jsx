@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, Typography, Tabs, Tab, Table, TableBody, TableCell, TableContainer,
@@ -6,11 +6,11 @@ import {
   Tooltip,
 } from '@mui/material';
 import { Search, Add, Visibility } from '@mui/icons-material';
-import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
-import { formatDate, getPriorityColor, capitalize } from '../../utils/helpers';
+import PriorityChip from '../../components/PriorityChip';
 import { useAuth } from '../../contexts/AuthContext';
+import useCoordinatorProjects from '../../hooks/useCoordinatorProjects';
 
 const STATUS_TAB_MAP = { pending: 1, in_progress: 2, completed: 3 };
 
@@ -31,29 +31,13 @@ const ADMIN_APPROVAL_CONFIG = {
 };
 
 export default function ProjectList() {
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { projects, loading, error } = useCoordinatorProjects();
   const location = useLocation();
   const initialTab = STATUS_TAB_MAP[location.state?.filter] || 0;
   const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
   const { role } = useAuth();
-
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        const res = await projectService.getProjects();
-        setProjects(Array.isArray(res.data) ? res.data : res.data?.results || []);
-      } catch {
-        setError('Failed to load projects');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProjects();
-  }, []);
 
   const statuses = ['', 'pending', 'in_progress', 'completed'];
   const filtered = projects
@@ -89,20 +73,17 @@ export default function ProjectList() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Title</TableCell>
-              <TableCell>Priority</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Payment Status</TableCell>
-              <TableCell>Admin Approval</TableCell>
-              <TableCell>Est. Value</TableCell>
-              <TableCell>Start</TableCell>
-              <TableCell>End</TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell sx={{ textAlign: 'center' }}>Title</TableCell>
+              <TableCell sx={{ textAlign: 'center' }}>Priority</TableCell>
+              <TableCell sx={{ textAlign: 'center' }}>Status</TableCell>
+              <TableCell sx={{ textAlign: 'center' }}>Payment Status</TableCell>
+              <TableCell sx={{ textAlign: 'center' }}>Admin Approval</TableCell>
+              <TableCell sx={{ textAlign: 'center' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={9} align="center">No projects found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} align="center">No projects found</TableCell></TableRow>
             ) : (
               filtered.map((p) => {
                 const paymentStatus = p.payment?.payment_status || 'pending';
@@ -110,12 +91,12 @@ export default function ProjectList() {
                 
                 return (
                   <TableRow key={p.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/dashboard/projects/${p.id}`)}>
-                    <TableCell sx={{ fontWeight: 600 }}>{p.title}</TableCell>
-                    <TableCell>
-                      <Chip label={capitalize(p.priority)} size="small" sx={{ bgcolor: `${getPriorityColor(p.priority)}20`, color: getPriorityColor(p.priority), fontWeight: 600, fontSize: 12, width: 110, justifyContent: 'center', border: `1px solid ${getPriorityColor(p.priority)}50` }} />
+                    <TableCell sx={{ fontWeight: 600, textAlign: 'center' }}>{p.title}</TableCell>
+                    <TableCell sx={{ textAlign: 'center' }}>
+                      <PriorityChip priority={p.priority} />
                     </TableCell>
-                    <TableCell><StatusChip status={p.status} label={p.status_display || p.status} /></TableCell>
-                    <TableCell>
+                    <TableCell sx={{ textAlign: 'center' }}><StatusChip status={p.status} label={p.status_display || p.status} /></TableCell>
+                    <TableCell sx={{ textAlign: 'center' }}>
                       <Chip
                         label={paymentConfig.label}
                         size="small"
@@ -130,7 +111,7 @@ export default function ProjectList() {
                         }}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={{ textAlign: 'center' }}>
                       {p.admin_approval_status && p.admin_approval_status !== 'not_required' ? (() => {
                         const config = ADMIN_APPROVAL_CONFIG[p.admin_approval_status] || ADMIN_APPROVAL_CONFIG.pending;
                         return (
@@ -149,15 +130,10 @@ export default function ProjectList() {
                           />
                         );
                       })() : (
-                        <Typography variant="body2" color="text.secondary">-</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>-</Typography>
                       )}
                     </TableCell>
-                    <TableCell>
-                      {p.estimated_value ? `Rs. ${Number(p.estimated_value).toLocaleString()}` : '-'}
-                    </TableCell>
-                    <TableCell>{formatDate(p.start_date)}</TableCell>
-                    <TableCell>{formatDate(p.end_date)}</TableCell>
-                    <TableCell>
+                    <TableCell sx={{ textAlign: 'center' }}>
                       <Button size="small" startIcon={<Visibility />} onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/projects/${p.id}`); }}>
                         View
                       </Button>

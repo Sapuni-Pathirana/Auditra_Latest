@@ -15,7 +15,9 @@ import {
 import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
-import { formatDate, formatDateTime, getPriorityColor, capitalize } from '../../utils/helpers';
+import InfoField from '../../components/InfoField';
+import PriorityChip from '../../components/PriorityChip';
+import { formatDate, formatDateTime, formatFileSize } from '../../utils/helpers';
 import { useAuth } from '../../contexts/AuthContext';
 import ReportHistory from '../../components/ReportHistory';
 
@@ -372,13 +374,6 @@ export default function ProjectDetail() {
     }
   };
 
-  const formatFileSize = (bytes) => {
-    if (!bytes) return '-';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   if (loading) return <LoadingSpinner />;
   if (!project) return <Alert severity="error">Project not found</Alert>;
 
@@ -503,7 +498,7 @@ export default function ProjectDetail() {
               <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>{project.title}</Typography>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <StatusChip status={project.status} label={project.status_display || project.status} />
-                <Chip label={capitalize(project.priority)} size="small" sx={{ bgcolor: `${getPriorityColor(project.priority)}20`, color: getPriorityColor(project.priority), fontWeight: 600, width: 110, justifyContent: 'center', border: `1px solid ${getPriorityColor(project.priority)}50` }} />
+                <PriorityChip priority={project.priority} />
               </Box>
             </Box>
             {canAccessStandups && (
@@ -584,20 +579,44 @@ export default function ProjectDetail() {
           
           <Grid container spacing={3}>
             <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Start Date</Typography>
-              <Typography sx={{ fontWeight: 600 }}>{formatDate(project.start_date)}</Typography>
+              <InfoField
+                label="Start Date"
+                value={formatDate(project.start_date)}
+                labelVariant="body2"
+                labelSx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}
+                valueVariant="body1"
+                valueSx={{ fontWeight: 600 }}
+              />
             </Grid>
             <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>End Date</Typography>
-              <Typography sx={{ fontWeight: 600 }}>{formatDate(project.end_date)}</Typography>
+              <InfoField
+                label="End Date"
+                value={formatDate(project.end_date)}
+                labelVariant="body2"
+                labelSx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}
+                valueVariant="body1"
+                valueSx={{ fontWeight: 600 }}
+              />
             </Grid>
             <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Project Coordinator</Typography>
-              <Typography sx={{ fontWeight: 600 }}>{project.coordinator_name || project.coordinator_username || '-'}</Typography>
+              <InfoField
+                label="Project Coordinator"
+                value={project.coordinator_name || project.coordinator_username}
+                labelVariant="body2"
+                labelSx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}
+                valueVariant="body1"
+                valueSx={{ fontWeight: 600 }}
+              />
             </Grid>
             <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Date Created</Typography>
-              <Typography sx={{ fontWeight: 600 }}>{formatDate(project.created_at)}</Typography>
+              <InfoField
+                label="Date Created"
+                value={formatDate(project.created_at)}
+                labelVariant="body2"
+                labelSx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}
+                valueVariant="body1"
+                valueSx={{ fontWeight: 600 }}
+              />
             </Grid>
           </Grid>
         </CardContent>
@@ -970,20 +989,44 @@ export default function ProjectDetail() {
             </Typography>
             <Box sx={{ display: 'flex', gap: 4, flexWrap: 'nowrap', overflowX: 'auto' }}>
               <Box sx={{ minWidth: 150, flex: '1 1 auto' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Full Name</Typography>
-                <Typography sx={{ fontWeight: 600 }}>{project.client_info.name || '-'}</Typography>
+                <InfoField
+                  label="Full Name"
+                  value={project.client_info.name}
+                  labelVariant="body2"
+                  labelSx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}
+                  valueVariant="body1"
+                  valueSx={{ fontWeight: 600 }}
+                />
               </Box>
               <Box sx={{ minWidth: 200, flex: '1 1 auto' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Email Address</Typography>
-                <Typography sx={{ fontWeight: 600 }}>{project.client_info.email || '-'}</Typography>
+                <InfoField
+                  label="Email Address"
+                  value={project.client_info.email}
+                  labelVariant="body2"
+                  labelSx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}
+                  valueVariant="body1"
+                  valueSx={{ fontWeight: 600 }}
+                />
               </Box>
               <Box sx={{ minWidth: 120, flex: '1 1 auto' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Phone Number</Typography>
-                <Typography sx={{ fontWeight: 600 }}>{project.client_info.phone || '-'}</Typography>
+                <InfoField
+                  label="Phone Number"
+                  value={project.client_info.phone}
+                  labelVariant="body2"
+                  labelSx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}
+                  valueVariant="body1"
+                  valueSx={{ fontWeight: 600 }}
+                />
               </Box>
               <Box sx={{ minWidth: 150, flex: '1 1 auto' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Company</Typography>
-                <Typography sx={{ fontWeight: 600 }}>{project.client_info.company || '-'}</Typography>
+                <InfoField
+                  label="Company"
+                  value={project.client_info.company}
+                  labelVariant="body2"
+                  labelSx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}
+                  valueVariant="body1"
+                  valueSx={{ fontWeight: 600 }}
+                />
               </Box>
             </Box>
           </CardContent>

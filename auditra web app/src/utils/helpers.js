@@ -73,3 +73,32 @@ export const formatCurrency = (amount) => {
     minimumFractionDigits: 0,
   }).format(amount);
 };
+
+export const formatFileSize = (bytes) => {
+  if (!bytes) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+export const extractApiErrorMessage = (err, fallback = 'Request failed') => {
+  const data = err?.response?.data;
+
+  if (data && typeof data === 'object') {
+    if (data.error) return data.error;
+    if (data.detail) return data.detail;
+    if (data.message) return data.message;
+
+    const msgs = Object.entries(data).map(([key, value]) => {
+      const fieldName = key.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+      const message = Array.isArray(value) ? value.join(', ') : value;
+      return `${fieldName}: ${message}`;
+    });
+
+    if (msgs.length > 0) {
+      return msgs.join('\n');
+    }
+  }
+
+  return err?.message || fallback;
+};
