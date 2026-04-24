@@ -1012,6 +1012,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // Check if project is assigned to current user
     if (!widget.project.isAssigned) {
       return Scaffold(
@@ -1053,7 +1054,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     final isSmallScreen = screenWidth < 360;
     
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Form(
         key: _formKey,
         child: NestedScrollView(
@@ -1130,6 +1131,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                   Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    color: Theme.of(context).cardColor,
                     child: Padding(
                       padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
                       child: Column(
@@ -1140,10 +1142,10 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue[100],
+                                  color: isDark ? const Color(0xFF1E293B) : Colors.blue[100],
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Icon(Icons.folder_open, color: Colors.blue[700], size: 20),
+                                child: Icon(Icons.folder_open, color: isDark ? Colors.blue[200] : Colors.blue[700], size: 20),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -1152,10 +1154,10 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                                   children: [
                                     Text(
                                       'Project Information',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
+                                        color: isDark ? Colors.white : Colors.black87,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -1163,7 +1165,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                                       widget.project.title,
                                       style: TextStyle(
                                         fontSize: 14,
-                                        color: Colors.grey[700],
+                                        color: isDark ? Colors.grey[300] : Colors.grey[700],
                                       ),
                                     ),
                                   ],
@@ -1176,14 +1178,14 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.grey[50],
+                                color: isDark ? const Color(0xFF0F172A) : Colors.grey[50],
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 widget.project.description!,
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: Colors.grey[800],
+                                  color: isDark ? Colors.grey[200] : Colors.grey[800],
                                 ),
                               ),
                             ),
@@ -1253,6 +1255,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                   Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    color: Theme.of(context).cardColor,
                     child: Padding(
                       padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
                       child: Column(
@@ -1262,12 +1265,12 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                             children: [
                               Icon(Icons.category, color: Colors.blue[700], size: 20),
                               const SizedBox(width: 8),
-                              const Text(
+                              Text(
                                 'Category *',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
+                                  color: isDark ? Colors.white : Colors.black87,
                                 ),
                               ),
                             ],
