@@ -66,9 +66,8 @@ const SubmissionInfoField = ({ label, value }) => (
   />
 );
 
-/* ------------------------------------------------------------------ */
+
 /*  Component                                                         */
-/* ------------------------------------------------------------------ */
 export default function AssignedSubmissions() {
   const navigate = useNavigate();
 
@@ -92,9 +91,8 @@ export default function AssignedSubmissions() {
   /* ---- snackbar state ---- */
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  /* ================================================================
-     Fetch submissions
-     ================================================================ */
+  
+  /* ----------Fetch submissions ----------*/
   const fetchSubmissions = useCallback(async () => {
     setLoading(true);
     try {

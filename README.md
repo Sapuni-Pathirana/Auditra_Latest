@@ -157,7 +157,7 @@ cd backend
 
 # Create virtual environment
 python -m venv venv
-venv\Scripts\activate.psl     # Windows
+venv\Scripts\activate    # Windows
 # source venv/bin/activate   # macOS/Linux
 
 # Install dependencies
