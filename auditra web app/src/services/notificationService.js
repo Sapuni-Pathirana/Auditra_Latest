@@ -1,17 +1,17 @@
 import axiosClient from '../api/axiosClient';
 
 const notificationService = {
-  getNotifications: () =>
-    axiosClient.get('/valuations/notifications/'),
+  getNotifications: (params = {}) =>
+    axiosClient.get('/notifications/', { params }),
 
   getUnreadCount: () =>
-    axiosClient.get('/valuations/notifications/unread-count/'),
+    axiosClient.get('/notifications/unread-count/'),
 
   markAsRead: (id) =>
-    axiosClient.post(`/valuations/notifications/${id}/read/`),
+    axiosClient.patch(`/notifications/${id}/read/`),
 
   markAllAsRead: () =>
-    axiosClient.post('/valuations/notifications/mark-all-read/'),
+    axiosClient.post('/notifications/mark-all-read/'),
 };
 
 export default notificationService;

@@ -1,47 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  IconButton, Badge, Popover, Box, Typography, List, ListItem,
-  ListItemText, Divider, Button, Chip, Snackbar, Alert,
+  IconButton, Badge, Popover, Box, Typography, Divider, Button, Snackbar, Alert,
 } from '@mui/material';
 import { Notifications, NotificationsNone, DoneAll, OpenInNew } from '@mui/icons-material';
-import axiosClient from '../api/axiosClient';
 import realtimeSocket from '../services/realtimeSocket';
-
-const SEVERITY_COLOR = { error: 'error', warning: 'warning', info: 'info', success: 'success' };
-
-function timeAgo(dateStr) {
-  const now = new Date();
-  const date = new Date(dateStr);
-  const diff = Math.floor((now - date) / 1000);
-  if (diff < 60) return 'Just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-  return date.toLocaleDateString();
-}
+import NotificationList from './NotificationList';
+import useNotifications, { SEVERITY_COLOR } from '../hooks/useNotifications';
 
 export default function NotificationDropdown() {
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [toast, setToast] = useState(null);
-
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const res = await axiosClient.get('/notifications/unread-count/');
-      setUnreadCount(res.data.count || 0);
-    } catch {}
-  }, []);
-
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const res = await axiosClient.get('/notifications/?unread=false');
-      const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
-      setNotifications(data);
-    } catch {}
-  }, []);
+  const {
+    notifications,
+    unreadCount,
+    fetchUnreadCount,
+    fetchNotifications,
+    markRead,
+    markAllRead,
+    prependNotification,
+  } = useNotifications();
 
   useEffect(() => {
     fetchUnreadCount();
@@ -54,7 +33,7 @@ export default function NotificationDropdown() {
   useEffect(() => {
     const unsub = realtimeSocket.subscribe((msg) => {
       if (msg.type === 'notification') {
-        const n = {
+        const notification = {
           id: msg.id,
           title: msg.title,
           message: msg.message,
@@ -64,33 +43,16 @@ export default function NotificationDropdown() {
           created_at: msg.created_at,
           is_read: false,
         };
-        setNotifications((prev) => [n, ...prev.slice(0, 99)]);
-        setUnreadCount((c) => c + 1);
-        setToast(n);
+        prependNotification(notification);
+        setToast(notification);
       }
     });
     return unsub;
-  }, []);
+  }, [prependNotification]);
 
   const handleOpen = (e) => {
     setAnchorEl(e.currentTarget);
-    fetchNotifications();
-  };
-
-  const handleMarkRead = async (id) => {
-    try {
-      await axiosClient.patch(`/notifications/${id}/read/`);
-      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
-      setUnreadCount((c) => Math.max(0, c - 1));
-    } catch {}
-  };
-
-  const handleMarkAllRead = async () => {
-    try {
-      await axiosClient.post('/notifications/mark-all-read/');
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      setUnreadCount(0);
-    } catch {}
+    fetchNotifications({ unread: false });
   };
 
   const open = Boolean(anchorEl);
@@ -141,7 +103,7 @@ export default function NotificationDropdown() {
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Notifications</Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
             {unreadCount > 0 && (
-              <Button size="small" startIcon={<DoneAll />} onClick={handleMarkAllRead} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
+              <Button size="small" startIcon={<DoneAll />} onClick={markAllRead} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
                 Mark all read
               </Button>
             )}
@@ -152,56 +114,19 @@ export default function NotificationDropdown() {
         </Box>
         <Divider />
 
-        {notifications.length === 0 ? (
-          <Box sx={{ p: 4, textAlign: 'center' }}>
-            <NotificationsNone sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography variant="body2" color="text.secondary">No notifications</Typography>
-          </Box>
-        ) : (
-          <List sx={{ p: 0, maxHeight: 400, overflow: 'auto' }}>
-            {notifications.map((n) => (
-              <ListItem
-                key={n.id}
-                onClick={() => { if (!n.is_read) handleMarkRead(n.id); if (n.action_url) { setAnchorEl(null); navigate(n.action_url); } }}
-                sx={{
-                  cursor: 'pointer',
-                  bgcolor: n.is_read ? 'transparent' : 'action.hover',
-                  borderLeft: '3px solid',
-                  borderColor: n.is_read ? 'transparent' : (SEVERITY_COLOR[n.severity] ? `${SEVERITY_COLOR[n.severity]}.main` : 'primary.main'),
-                  '&:hover': { bgcolor: 'action.selected' },
-                  py: 1.5, px: 2,
-                }}
-              >
-                <ListItemText
-                  primary={
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: n.is_read ? 400 : 700, fontSize: '0.82rem' }}>
-                        {n.title}
-                      </Typography>
-                      <Chip
-                        label={n.category}
-                        size="small"
-                        color={SEVERITY_COLOR[n.severity] || 'default'}
-                        variant="outlined"
-                        sx={{ fontSize: '0.65rem', height: 20 }}
-                      />
-                    </Box>
-                  }
-                  secondary={
-                    <>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, lineHeight: 1.4 }}>
-                        {n.message?.slice(0, 100)}
-                      </Typography>
-                      <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5, fontSize: '0.7rem' }}>
-                        {timeAgo(n.created_at)}
-                      </Typography>
-                    </>
-                  }
-                />
-              </ListItem>
-            ))}
-          </List>
-        )}
+        <NotificationList
+          notifications={notifications}
+          dense
+          truncateMessage
+          onNotificationClick={(n) => {
+            if (!n.is_read) markRead(n.id);
+            if (n.action_url) {
+              setAnchorEl(null);
+              navigate(n.action_url);
+            }
+          }}
+          emptyMessage="No notifications"
+        />
       </Popover>
     </>
   );

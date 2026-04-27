@@ -8,7 +8,7 @@ import { Add, Visibility } from '@mui/icons-material';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
 import PriorityChip from '../../components/PriorityChip';
-import ProjectsTabFilters from '../../components/ProjectsTabFilters';
+import TabFilters from '../../components/TabFilters';
 import { useAuth } from '../../contexts/AuthContext';
 import useCoordinatorProjects from '../../hooks/useCoordinatorProjects';
 
@@ -58,14 +58,14 @@ export default function ProjectList() {
       </Box>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      <ProjectsTabFilters
+      <TabFilters
         tab={tab}
         onTabChange={setTab}
         tabs={[
-          { key: 'all', label: `All (${projects.length})` },
-          { key: 'pending', label: `Pending (${projects.filter(p => p.status === 'pending').length})` },
-          { key: 'in_progress', label: `In Progress (${projects.filter(p => p.status === 'in_progress').length})` },
-          { key: 'completed', label: `Completed (${projects.filter(p => p.status === 'completed').length})` },
+          { key: 'all', value: 0, label: 'All', count: projects.length, colorKey: 'all' },
+          { key: 'pending', value: 1, label: 'Pending', count: projects.filter(p => p.status === 'pending').length, colorKey: 'pending' },
+          { key: 'in_progress', value: 2, label: 'In Progress', count: projects.filter(p => p.status === 'in_progress').length, colorKey: 'accepted' },
+          { key: 'completed', value: 3, label: 'Completed', count: projects.filter(p => p.status === 'completed').length, colorKey: 'accepted' },
         ]}
         tabsSx={{ mb: 2 }}
         search={search}

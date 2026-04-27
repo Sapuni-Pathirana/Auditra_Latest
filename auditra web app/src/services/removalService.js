@@ -4,13 +4,7 @@ const removalService = {
   createRequest: (data) =>
     axiosClient.post('/auth/removal-requests/create/', data),
 
-  createRemovalRequest: (data) =>
-    axiosClient.post('/auth/removal-requests/create/', data),
-
   getAllRequests: () =>
-    axiosClient.get('/auth/removal-requests/'),
-
-  getRemovalRequests: () =>
     axiosClient.get('/auth/removal-requests/'),
 
   approveRequest: (requestId) =>

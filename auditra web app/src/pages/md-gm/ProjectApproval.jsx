@@ -5,11 +5,12 @@ import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Chip, TextField, InputAdornment, CircularProgress,
   Alert, Snackbar, Button, Dialog, DialogTitle, DialogContent,
-  DialogActions, Tabs, Tab, Divider
+  DialogActions, Divider
 } from '@mui/material';
 import { Search, CheckCircle, Cancel, Visibility } from '@mui/icons-material';
 import projectService from '../../services/projectService';
 import { formatDate, getStatusColor, capitalize, getPriorityColor, getPriorityBgColor } from '../../utils/helpers';
+import TabFilters from '../../components/TabFilters';
 
 const STATUS_TAB_MAP = { pending: 1, approved: 2, rejected: 3 };
 
@@ -25,6 +26,10 @@ export default function ProjectApproval() {
   const [remarks, setRemarks] = useState('');
 
   const statusFilters = ['all', 'pending', 'approved', 'rejected'];
+  const allCount = projects.length;
+  const pendingCount = projects.filter(p => p.status === 'pending').length;
+  const approvedCount = projects.filter(p => p.status === 'approved' || p.status === 'active').length;
+  const rejectedCount = projects.filter(p => p.status === 'rejected').length;
 
   useEffect(() => { fetchProjects(); }, []);
 
@@ -71,12 +76,17 @@ export default function ProjectApproval() {
       </Typography>
 
       <Paper sx={{ mb: 3 }}>
-        <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tab label={`All (${projects.length})`} />
-          <Tab label={`Pending (${projects.filter(p => p.status === 'pending').length})`} />
-          <Tab label={`Approved (${projects.filter(p => p.status === 'approved' || p.status === 'active').length})`} />
-          <Tab label={`Rejected (${projects.filter(p => p.status === 'rejected').length})`} />
-        </Tabs>
+        <TabFilters
+          tab={tabValue}
+          onTabChange={setTabValue}
+          tabs={[
+            { key: 0, value: 0, label: 'All', count: allCount, colorKey: 'all' },
+            { key: 1, value: 1, label: 'Pending', count: pendingCount, colorKey: 'pending' },
+            { key: 2, value: 2, label: 'Approved', count: approvedCount, colorKey: 'accepted' },
+            { key: 3, value: 3, label: 'Rejected', count: rejectedCount, colorKey: 'rejected' },
+          ]}
+          tabsSx={{ borderBottom: 1, borderColor: 'divider' }}
+        />
       </Paper>
 
       <TextField

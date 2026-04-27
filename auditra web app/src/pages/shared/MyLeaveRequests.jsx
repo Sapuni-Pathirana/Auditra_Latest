@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Box, Card, CardContent, Typography, Button, Grid, TextField, MenuItem,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Dialog, DialogTitle, DialogContent, DialogActions, Alert, Tabs, Tab,
+  Dialog, DialogTitle, DialogContent, DialogActions, Alert,
   Chip, FormControlLabel, Checkbox,
 } from '@mui/material';
 import { Add, Cancel } from '@mui/icons-material';
@@ -10,6 +10,7 @@ import axiosClient from '../../api/axiosClient';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
 import StatsCard from '../../components/StatsCard';
+import TabFilters from '../../components/TabFilters';
 import { formatDate } from '../../utils/helpers';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -102,6 +103,11 @@ export default function MyLeaveRequests() {
     return new Date(r.start_date) > today;
   };
 
+  const allCount = requests.length;
+  const pendingCount = requests.filter((request) => request.status === 'pending').length;
+  const approvedCount = requests.filter((request) => request.status === 'approved').length;
+  const rejectedCount = requests.filter((request) => ['rejected', 'cancelled_by_user'].includes(request.status)).length;
+
   const filteredRequests = tab === 0 ? requests
     : tab === 1 ? requests.filter(r => r.status === 'pending')
     : tab === 2 ? requests.filter(r => r.status === 'approved')
@@ -149,12 +155,17 @@ export default function MyLeaveRequests() {
         );
       })()}
 
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label="All" />
-        <Tab label="Pending" />
-        <Tab label="Approved" />
-        <Tab label="Rejected / Cancelled" />
-      </Tabs>
+      <TabFilters
+        tab={tab}
+        onTabChange={setTab}
+        tabs={[
+          { key: 0, value: 0, label: 'All', count: allCount, colorKey: 'all' },
+          { key: 1, value: 1, label: 'Pending', count: pendingCount, colorKey: 'pending' },
+          { key: 2, value: 2, label: 'Approved', count: approvedCount, colorKey: 'accepted' },
+          { key: 3, value: 3, label: 'Rejected / Cancelled', count: rejectedCount, colorKey: 'rejected' },
+        ]}
+        tabsSx={{ mb: 2 }}
+      />
 
       <TableContainer component={Paper}>
         <Table size="small">

@@ -8,6 +8,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, generics, serializers
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -1673,7 +1674,18 @@ class SendPaymentRequestView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Check if client is assigned
+        # Ensure client is assigned. If missing, try recovering from saved client_info.
+        if not project.assigned_client:
+            client_info = project.client_info or {}
+            if client_info.get('email'):
+                client_user, _, client_error = process_client_for_project(project, client_info)
+                if client_error or not client_user:
+                    return Response(
+                        {'error': client_error or 'No client assigned to this project'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                project.refresh_from_db(fields=['assigned_client'])
+
         if not project.assigned_client:
             return Response(
                 {'error': 'No client assigned to this project'},
@@ -1689,7 +1701,15 @@ class SendPaymentRequestView(APIView):
             }
         )
 
-        # Check if payment request already sent
+        # Idempotent behavior: if already requested, return success payload.
+        if payment.payment_status == 'requested':
+            return Response({
+                'success': True,
+                'message': 'Payment request already sent to client',
+                'payment': ProjectPaymentSerializer(payment, context={'request': request}).data
+            }, status=status.HTTP_200_OK)
+
+        # Check if payment request can be sent
         if payment.payment_status not in ['pending', 'rejected']:
             return Response(
                 {'error': f'Payment request already sent (current status: {payment.payment_status})'},
@@ -1743,16 +1763,6 @@ Please upload the bank slip after making the payment."""
             )
         except Exception:
             pass
-        _notify_project_users(
-            list(User.objects.filter(role__role='admin', is_active=True)),
-            category='project',
-            severity='warning',
-            title=f'Cancellation requested — {project.title}',
-            message=f'{request.user.get_full_name() or request.user.username} requested project cancellation.',
-            meta={'project_id': project.id, 'request_id': cancellation_request.id, 'reason': reason},
-            action_url=f'/dashboard/projects/{project.id}',
-            actor=request.user,
-        )
         _notify_project_users(
             [project.assigned_client],
             category='payment',
@@ -1837,16 +1847,6 @@ class UploadBankSlipView(APIView):
             )
         except Exception:
             pass
-        _notify_project_users(
-            assigned_users,
-            category='project',
-            severity='warning',
-            title=f'Project cancelled — {project.title}',
-            message=f'Cancellation request approved. Reason: {cancellation_request.reason}',
-            meta={'project_id': project.id, 'request_id': request_id, 'status': 'cancelled'},
-            action_url=f'/dashboard/projects/{project.id}',
-            actor=request.user,
-        )
 
         # Feature #3 (C1): notify coordinator that a bank slip is awaiting review.
         try:
@@ -1943,16 +1943,6 @@ class ApprovePaymentView(APIView):
             )
         except Exception:
             pass
-        _notify_project_users(
-            [cancellation_request.requested_by],
-            category='project',
-            severity='info',
-            title=f'Cancellation request rejected — {cancellation_request.project.title}',
-            message=f'Admin rejected your cancellation request. Remarks: {admin_remarks}',
-            meta={'project_id': cancellation_request.project.id, 'request_id': request_id, 'status': 'rejected'},
-            action_url=f'/dashboard/projects/{cancellation_request.project.id}',
-            actor=request.user,
-        )
 
         # Feature #3 (C1): notify client that payment was approved.
         try:
@@ -2052,16 +2042,6 @@ class RejectPaymentView(APIView):
             )
         except Exception:
             pass
-        _notify_project_users(
-            [agent, request.user],
-            category='project',
-            severity='info',
-            title=f'Commission report generated — {project.title}',
-            message=f'Commission report is ready (Rs. {payment.agent_payment_amount:,.2f}).',
-            meta={'project_id': project.id, 'report_id': report.id},
-            action_url=f'/dashboard/projects/{project.id}',
-            actor=None,
-        )
 
         # Feature #3 (C1): notify client that payment was rejected.
         try:

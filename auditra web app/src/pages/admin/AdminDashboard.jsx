@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Typography, Grid, Alert, Card, CardContent, useTheme, Tab, Tabs } from '@mui/material';
+import { Box, Typography, Grid, Alert, Card, CardContent, useTheme } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People';
 import BusinessIcon from '@mui/icons-material/Business';
 import WarningIcon from '@mui/icons-material/Warning';
@@ -9,6 +9,7 @@ import authService from '../../services/authService';
 import axiosClient from '../../api/axiosClient';
 import StatsCard from '../../components/StatsCard';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import TabFilters from '../../components/TabFilters';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, Legend, ComposedChart,
@@ -293,11 +294,16 @@ export default function AdminDashboard() {
                 <CardContent sx={{ p: 3 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="subtitle1" fontWeight={700}>Project Status by Period</Typography>
-                    <Tabs value={periodTab} onChange={(_, v) => setPeriodTab(v)} sx={{ minHeight: 32 }}>
-                      <Tab label="Monthly" sx={{ minHeight: 32, py: 0.5 }} />
-                      <Tab label="Quarterly" sx={{ minHeight: 32, py: 0.5 }} />
-                      <Tab label="Yearly" sx={{ minHeight: 32, py: 0.5 }} />
-                    </Tabs>
+                    <TabFilters
+                      tab={periodTab}
+                      onTabChange={setPeriodTab}
+                      tabs={[
+                        { key: 0, value: 0, label: 'Monthly', colorKey: 'all' },
+                        { key: 1, value: 1, label: 'Quarterly', colorKey: 'accepted' },
+                        { key: 2, value: 2, label: 'Yearly', colorKey: 'pending' },
+                      ]}
+                      tabsSx={{ minHeight: 32 }}
+                    />
                   </Box>
                   {(() => {
                     const src = [kpis.project_status_by_month, kpis.project_status_by_quarter, kpis.project_status_by_year][periodTab] || [];

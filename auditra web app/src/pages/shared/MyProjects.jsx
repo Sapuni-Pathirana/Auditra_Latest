@@ -7,7 +7,7 @@ import { Search, Folder, AttachFile } from '@mui/icons-material';
 import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
-import ProjectsTabFilters from '../../components/ProjectsTabFilters';
+import TabFilters from '../../components/TabFilters';
 import { formatDate, getPriorityColor, capitalize } from '../../utils/helpers';
 
 const STATUS_TAB_MAP = { pending: 1, in_progress: 2, completed: 3 };
@@ -50,14 +50,14 @@ export default function MyProjects() {
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>My Projects</Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      <ProjectsTabFilters
+      <TabFilters
         tab={tab}
         onTabChange={setTab}
         tabs={[
-          { key: 'all', label: `All (${projects.length})` },
-          { key: 'pending', label: `Pending (${projects.filter(p => p.status === 'pending').length})` },
-          { key: 'in_progress', label: `In Progress (${projects.filter(p => p.status === 'in_progress').length})` },
-          { key: 'completed', label: `Completed (${projects.filter(p => p.status === 'completed').length})` },
+          { key: 'all', value: 0, label: 'All', count: projects.length, colorKey: 'all' },
+          { key: 'pending', value: 1, label: 'Pending', count: projects.filter(p => p.status === 'pending').length, colorKey: 'pending' },
+          { key: 'in_progress', value: 2, label: 'In Progress', count: projects.filter(p => p.status === 'in_progress').length, colorKey: 'accepted' },
+          { key: 'completed', value: 3, label: 'Completed', count: projects.filter(p => p.status === 'completed').length, colorKey: 'accepted' },
         ]}
         tabsSx={{ mb: 2 }}
         search={search}

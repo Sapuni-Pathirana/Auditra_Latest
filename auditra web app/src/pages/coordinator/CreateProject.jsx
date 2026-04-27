@@ -80,6 +80,11 @@ export default function CreateProject() {
 
   const today = new Date().toISOString().split('T')[0];
 
+  const hasSubmissionAgentDetails = Boolean(
+    submissionData?.agent_name || submissionData?.agent_email || submissionData?.agent_phone
+  );
+  const showAgentSection = !submissionData || hasSubmissionAgentDetails;
+
   const validateForm = () => {
     const errors = {};
 
@@ -381,70 +386,72 @@ export default function CreateProject() {
             )}
           </CardContent>
         </Card>
-        <Card sx={{ mb: 3 }}>
-          <CardContent sx={{ p: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Agent Information (Optional)</Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Agent Name"
-                  name="agent_name"
-                  value={form.agent_name}
-                  onChange={handleChange}
-                  error={!!formErrors.agent_name}
-                  helperText={formErrors.agent_name}
-                />
+        {showAgentSection && (
+          <Card sx={{ mb: 3 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Agent Information (Optional)</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Agent Name"
+                    name="agent_name"
+                    value={form.agent_name}
+                    onChange={handleChange}
+                    error={!!formErrors.agent_name}
+                    helperText={formErrors.agent_name}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Agent Email"
+                    name="agent_email"
+                    type="email"
+                    value={form.agent_email}
+                    onChange={(e) => {
+                      handleChange(e);
+                      if (agentEmailStatus) { setAgentEmailStatus(null); setAgentEmailMessage(''); }
+                    }}
+                    onBlur={handleAgentEmailBlur}
+                    error={!!formErrors.agent_email}
+                    helperText={formErrors.agent_email || agentEmailMessage}
+                    FormHelperTextProps={{ sx: { color: formErrors.agent_email ? 'error.main' : getEmailHelperColor(agentEmailStatus) } }}
+                    InputProps={{
+                      endAdornment: agentEmailStatus ? (
+                        <InputAdornment position="end">{getEmailAdornment(agentEmailStatus)}</InputAdornment>
+                      ) : null,
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Agent Phone"
+                    name="agent_phone"
+                    value={form.agent_phone}
+                    onChange={handleChange}
+                    placeholder="+94XXXXXXXXX"
+                    error={!!formErrors.agent_phone}
+                    helperText={formErrors.agent_phone}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}><TextField fullWidth label="License Number" name="agent_license_number" value={form.agent_license_number} onChange={handleChange} /></Grid>
+                <Grid item xs={12} sm={4}><TextField fullWidth label="Agent Address" name="agent_address" value={form.agent_address} onChange={handleChange} /></Grid>
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Agent Email"
-                  name="agent_email"
-                  type="email"
-                  value={form.agent_email}
-                  onChange={(e) => {
-                    handleChange(e);
-                    if (agentEmailStatus) { setAgentEmailStatus(null); setAgentEmailMessage(''); }
-                  }}
-                  onBlur={handleAgentEmailBlur}
-                  error={!!formErrors.agent_email}
-                  helperText={formErrors.agent_email || agentEmailMessage}
-                  FormHelperTextProps={{ sx: { color: formErrors.agent_email ? 'error.main' : getEmailHelperColor(agentEmailStatus) } }}
-                  InputProps={{
-                    endAdornment: agentEmailStatus ? (
-                      <InputAdornment position="end">{getEmailAdornment(agentEmailStatus)}</InputAdornment>
-                    ) : null,
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="Agent Phone"
-                  name="agent_phone"
-                  value={form.agent_phone}
-                  onChange={handleChange}
-                  placeholder="+94XXXXXXXXX"
-                  error={!!formErrors.agent_phone}
-                  helperText={formErrors.agent_phone}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}><TextField fullWidth label="License Number" name="agent_license_number" value={form.agent_license_number} onChange={handleChange} /></Grid>
-              <Grid item xs={12} sm={4}><TextField fullWidth label="Agent Address" name="agent_address" value={form.agent_address} onChange={handleChange} /></Grid>
-            </Grid>
-            {agentEmailStatus === 'not_found' && form.agent_email && (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                A new agent account will be created when you submit this project. Login credentials will be emailed to {form.agent_email}.
-              </Alert>
-            )}
-            {agentEmailStatus === 'mismatch' && (
-              <Alert severity="warning" sx={{ mt: 2 }}>
-                {agentEmailMessage}. This email cannot be used for an agent role.
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
+              {agentEmailStatus === 'not_found' && form.agent_email && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  A new agent account will be created when you submit this project. Login credentials will be emailed to {form.agent_email}.
+                </Alert>
+              )}
+              {agentEmailStatus === 'mismatch' && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  {agentEmailMessage}. This email cannot be used for an agent role.
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        )}
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Project Documents (Optional)</Typography>

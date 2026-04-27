@@ -23,7 +23,7 @@ export default function RemovalRequest() {
       try {
         const [usersRes, requestsRes] = await Promise.all([
           authService.getAllUsers().catch(() => ({ data: [] })),
-          removalService.getRemovalRequests().catch(() => ({ data: [] })),
+          removalService.getAllRequests().catch(() => ({ data: [] })),
         ]);
         const allUsers = Array.isArray(usersRes.data) ? usersRes.data : usersRes.data?.results || [];
         const excludedRoles = ['admin', 'hr_head', 'client', 'agent', 'unassigned'];
@@ -46,13 +46,13 @@ export default function RemovalRequest() {
     }
     try {
       setSubmitting(true);
-      await removalService.createRemovalRequest({
+      await removalService.createRequest({
         user_id: form.employee,
         reason: form.details ? `${form.reason} - ${form.details}` : form.reason,
       });
       setSnackbar({ open: true, message: 'Removal request submitted successfully', severity: 'success' });
       setForm({ employee: '', reason: '', details: '' });
-      const res = await removalService.getRemovalRequests();
+      const res = await removalService.getAllRequests();
       setRequests(Array.isArray(res.data) ? res.data : res.data?.results || []);
     } catch (err) {
       setSnackbar({ open: true, message: err.response?.data?.error || 'Failed to submit request', severity: 'error' });

@@ -20,6 +20,10 @@ import PriorityChip from '../../components/PriorityChip';
 import { formatDate, formatDateTime, formatFileSize } from '../../utils/helpers';
 import { useAuth } from '../../contexts/AuthContext';
 import ReportHistory from '../../components/ReportHistory';
+import AssignUserDialog from '../../components/project-detail/AssignUserDialog';
+import ProjectDetailDialogs from '../../components/project-detail/ProjectDetailDialogs';
+import ProjectDocumentsSection from '../../components/project-detail/ProjectDocumentsSection';
+import ProjectTimelineReportsSection from '../../components/project-detail/ProjectTimelineReportsSection';
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -835,31 +839,7 @@ export default function ProjectDetail() {
                   >
                     {paymentLoading ? 'Sending...' : 'Send Request'}
                   </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<CheckCircle />}
-                    onClick={handleApprovePayment}
-                    disabled={paymentLoading}
-                    size="small"
-                    color="success"
-                  >
-                    {paymentLoading ? 'Processing...' : 'Mark as Paid'}
-                  </Button>
                 </Box>
-              )}
-
-              {paymentStatus === 'requested' && (
-                <Button
-                  variant="outlined"
-                  startIcon={<CheckCircle />}
-                  onClick={handleApprovePayment}
-                  disabled={paymentLoading}
-                  size="small"
-                  color="success"
-                  sx={{ alignSelf: 'flex-start' }}
-                >
-                  {paymentLoading ? 'Processing...' : 'Mark as Paid'}
-                </Button>
               )}
 
               {(paymentStatus === 'submitted' || paymentStatus === 'under_review') && (
@@ -1099,513 +1079,67 @@ export default function ProjectDetail() {
         </Card>
       )}
 
-      <Dialog open={!!assignDialog} onClose={() => { setAssignDialog(null); setSelectedUser(''); }} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
-            Assign {assignDialog?.replace(/_/g, ' ')}
-          </Typography>
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Please select a {assignDialog?.replace(/_/g, ' ')} to assign to this project.
-          </Typography>
-          <Select
-            fullWidth
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            displayEmpty
-            sx={{ mt: 1 }}
-          >
-            <MenuItem value="" disabled>
-              {assignDialog === 'field_officer' && 'Select a Field Officer'}
-              {assignDialog === 'accessor' && 'Select an Accessor'}
-              {assignDialog === 'senior_valuer' && 'Select a Senior Valuer'}
-              {assignDialog === 'client' && 'Select a Client'}
-              {assignDialog === 'agent' && 'Select an Agent'}
-            </MenuItem>
-            {availableUsers.map((u) => (
-              <MenuItem key={u.id} value={u.id}>
-                {u.full_name || `${u.first_name} ${u.last_name}`.trim() || u.username}
-                {u.email ? ` (${u.email})` : ''}
-                {u.assigned_projects_count > 0 ? ` — ${u.assigned_projects_count} project${u.assigned_projects_count > 1 ? 's' : ''}` : ''}
-              </MenuItem>
-            ))}
-          </Select>
-          {availableUsers.length === 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 2, fontStyle: 'italic' }}>
-              No {assignDialog?.replace(/_/g, ' ')}s are currently available.
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => { setAssignDialog(null); setSelectedUser(''); }}>Cancel</Button>
-          <Button variant="contained" onClick={handleAssign} disabled={!selectedUser}>Confirm Assignment</Button>
-        </DialogActions>
-      </Dialog>
+      <AssignUserDialog
+        open={!!assignDialog}
+        assignType={assignDialog}
+        selectedUser={selectedUser}
+        availableUsers={availableUsers}
+        onClose={() => {
+          setAssignDialog(null);
+          setSelectedUser('');
+        }}
+        onChangeUser={setSelectedUser}
+        onConfirm={handleAssign}
+      />
 
-      {/* Project Documents */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AttachFile color="primary" />
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>Project Documents</Typography>
-            </Box>
-            {isCoordinator && project.status !== 'cancelled' && (
-              <Button
-                variant="outlined"
-                component="label"
-                size="small"
-                startIcon={<Description />}
-                disabled={docUploading}
-              >
-                {docUploading ? 'Uploading...' : 'Upload Document'}
-                <input type="file" hidden ref={docFileRef} onChange={handleDocumentFileSelected} />
-              </Button>
-            )}
-          </Box>
+      <ProjectDocumentsSection
+        project={project}
+        isCoordinator={isCoordinator}
+        docUploading={docUploading}
+        docFileRef={docFileRef}
+        onDocumentFileSelected={handleDocumentFileSelected}
+        deletingDocId={deletingDocId}
+        onDeleteDocument={handleDeleteDocument}
+      />
 
-          {docUploading && <LinearProgress sx={{ mb: 2 }} />}
+      <ProjectTimelineReportsSection project={project} />
 
-          {project.documents && project.documents.length > 0 ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {project.documents.map((doc) => (
-                <Box
-                  key={doc.id}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    p: 2,
-                    bgcolor: (t) => t.palette.custom?.cardInner || (t.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#f5f7fa'),
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-                    <Description sx={{ color: 'primary.main' }} />
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{doc.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {doc._optimistic ? (
-                          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-                            <CircularProgress size={10} />
-                            Uploading...
-                          </Box>
-                        ) : (
-                          <>
-                            {formatFileSize(doc.file_size)} &middot; Uploaded {formatDate(doc.uploaded_at)}
-                            {doc.uploaded_by_username ? ` by ${doc.uploaded_by_username}` : ''}
-                          </>
-                        )}
-                      </Typography>
-                    </Box>
-                  </Box>
-                  <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                    {doc._optimistic ? (
-                      <Tooltip title="Uploading...">
-                        <span>
-                          <IconButton size="small" disabled>
-                            <Visibility fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    ) : (
-                      <Tooltip title="View">
-                        <IconButton size="small" href={doc.file_url} target="_blank" component="a">
-                          <Visibility fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                    {isCoordinator && (
-                      <Tooltip title="Delete">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => handleDeleteDocument(doc.id)}
-                          disabled={deletingDocId === doc.id || !!doc._optimistic}
-                        >
-                          <Delete fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Box>
-                </Box>
-              ))}
-            </Box>
-          ) : (
-            <Box sx={{ py: 3, textAlign: 'center' }}>
-              <Description sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-              <Typography color="text.secondary">No documents have been attached to this project.</Typography>
-            </Box>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Project Timeline & Approved Reports */}
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: '100%', minHeight: 400 }}>
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <TimelineIcon color="primary" />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>Project Timeline</Typography>
-              </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Activity history and status updates
-              </Typography>
-
-              {project.history && project.history.length > 0 ? (
-                <Box sx={{ position: 'relative', pl: 3, '&::before': { content: '""', position: 'absolute', left: 8, top: 10, bottom: 10, width: '2px', bgcolor: 'divider' } }}>
-                  {project.history.slice().reverse().map((event, index) => (
-                    <Box key={event.id} sx={{ mb: 3, position: 'relative' }}>
-                      <Box sx={{
-                        position: 'absolute',
-                        left: -21,
-                        top: 4,
-                        width: 12,
-                        height: 12,
-                        borderRadius: '50%',
-                        bgcolor: index === 0 ? 'primary.main' : 'divider',
-                        border: '2px solid white',
-                        boxShadow: '0 0 0 2px rgba(0,0,0,0.05)',
-                        zIndex: 1,
-                      }} />
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                        {event.status_display || event.status}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                        {event.notes}
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <AssignmentInd sx={{ fontSize: 14 }} /> {event.created_by_name || event.created_by_username}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">•</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <EventNote sx={{ fontSize: 14 }} /> {formatDate(event.created_at)}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Box sx={{ py: 4, textAlign: 'center' }}>
-                  <Typography color="text.secondary">No activity has been recorded yet.</Typography>
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: '100%', minHeight: 400 }}>
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <FactCheck color="primary" />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>Final Valuation Reports</Typography>
-              </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Approved reports available for download
-              </Typography>
-
-              {project.valuations && project.valuations.filter(v => v.status === 'approved').length > 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {project.valuations.filter(v => v.status === 'approved').map(valuation => (
-                    <Box key={valuation.id} sx={{ p: 2, bgcolor: (t) => t.palette.custom.cardInner, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                        <Box>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                            {valuation.category_display} Report
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Approved by Senior Valuer
-                          </Typography>
-                        </Box>
-                        {valuation.final_report_url && (
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<Download />}
-                            href={valuation.final_report_url}
-                            target="_blank"
-                          >
-                            PDF
-                          </Button>
-                        )}
-                      </Box>
-                      {valuation.senior_valuer_comments && (
-                        <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary', fontSize: '0.8125rem' }}>
-                          "{valuation.senior_valuer_comments}"
-                        </Typography>
-                      )}
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Box sx={{ py: 4, textAlign: 'center' }}>
-                  <Description sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-                  <Typography color="text.secondary">No approved reports are available at this time.</Typography>
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Valuation Report History */}
-      {project.valuations && project.valuations.length > 0 && (
-        <Card sx={{ mt: 3 }}>
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <TimelineIcon color="primary" />
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>Valuation Report History</Typography>
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Submission and review history for each valuation report
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {project.valuations.map(v => (
-                <Box key={v.id} sx={{ p: 2, bgcolor: (t) => t.palette.custom.cardInner, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                      {v.category_display || v.category || 'Valuation'}
-                    </Typography>
-                    <StatusChip status={v.status} label={v.status_display || v.status} />
-                  </Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Field Officer: {v.field_officer_name || v.field_officer_username}
-                  </Typography>
-                  <ReportHistory history={v.history} />
-                </Box>
-              ))}
-            </Box>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Payment Rejection Dialog */}
-      <Dialog open={rejectPaymentDialog} onClose={() => !paymentLoading && setRejectPaymentDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: 'error.main' }}>
-            Reject Payment
-          </Typography>
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Please provide a reason for rejecting this payment. The client will be notified and may re-submit a bank slip.
-          </Typography>
-          <TextField
-            fullWidth
-            multiline
-            rows={3}
-            label="Rejection Reason"
-            placeholder="Please specify the reason for rejection (e.g., bank slip is unclear, amount does not match the invoice, etc.)"
-            value={paymentRejectReason}
-            onChange={(e) => setPaymentRejectReason(e.target.value)}
-            required
-            error={!paymentRejectReason.trim() && rejectPaymentDialog}
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setRejectPaymentDialog(false)} disabled={paymentLoading}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleRejectPayment}
-            disabled={paymentLoading || !paymentRejectReason.trim()}
-          >
-            {paymentLoading ? 'Processing...' : 'Confirm Rejection'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      
-      {/* Cancellation Request Dialog */}
-      <Dialog open={cancelDialog} onClose={() => !cancelLoading && setCancelDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: 'error.main' }}>
-            Request Project Cancellation
-          </Typography>
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Please provide a reason for cancelling this project. Your request will be sent to the admin for review. All assigned team members will be notified of the decision.
-          </Typography>
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            label="Cancellation Reason"
-            placeholder="Please explain why this project needs to be cancelled..."
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            required
-            error={!cancelReason.trim() && cancelDialog}
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setCancelDialog(false)} disabled={cancelLoading}>
-            Go Back
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleRequestCancellation}
-            disabled={cancelLoading || !cancelReason.trim()}
-            startIcon={<Block />}
-          >
-            {cancelLoading ? 'Submitting...' : 'Submit Request'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Agent Payment Dialog */}
-      <Dialog open={agentPaymentDialog} onClose={() => !agentPaymentLoading && setAgentPaymentDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            Record Agent Payment
-          </Typography>
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Record the payment made to the agent for this project. The agent will be able to see this in their payments tab.
-          </Typography>
-          <TextField
-            fullWidth
-            label="Payment Amount (Rs.)"
-            type="number"
-            value={agentPaymentAmount}
-            onChange={(e) => setAgentPaymentAmount(e.target.value)}
-            required
-            sx={{ mb: 2 }}
-            inputProps={{ min: 0, step: 0.01 }}
-          />
-          <TextField
-            fullWidth
-            multiline
-            rows={2}
-            label="Notes (Optional)"
-            placeholder="Any notes about this payment..."
-            value={agentPaymentNotes}
-            onChange={(e) => setAgentPaymentNotes(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setAgentPaymentDialog(false)} disabled={agentPaymentLoading}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleRecordAgentPayment}
-            disabled={agentPaymentLoading || !agentPaymentAmount || Number(agentPaymentAmount) <= 0}
-            startIcon={<AttachMoney />}
-          >
-            {agentPaymentLoading ? 'Recording...' : 'Record Payment'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Commission Report Dialog */}
-      <Dialog open={reportDialog} onClose={() => { setReportDialog(false); setGeneratedReport(null); }} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            Commission Report
-          </Typography>
-        </DialogTitle>
-        <DialogContent>
-          {generatedReport && (
-            <Box>
-              <Alert severity="success" sx={{ mb: 2 }}>
-                Commission report generated successfully!
-              </Alert>
-              <Box sx={{ p: 2, bgcolor: (t) => t.palette.custom?.cardInner || '#f5f5f5', borderRadius: 2, mb: 2 }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Project</Typography>
-                <Typography sx={{ fontWeight: 600, mb: 1 }}>{generatedReport.project_title}</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Agent</Typography>
-                <Typography sx={{ fontWeight: 600, mb: 1 }}>{generatedReport.agent_name}</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mb: 0.5 }}>Commission Amount</Typography>
-                <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                  Rs. {Number(generatedReport.commission_amount).toLocaleString()}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {generatedReport.report_file_url && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<Download />}
-                    href={generatedReport.report_file_url}
-                    target="_blank"
-                    size="small"
-                  >
-                    Download Report
-                  </Button>
-                )}
-                {!generatedReport.sent_to_agent && (
-                  <Button
-                    variant="contained"
-                    startIcon={<Send />}
-                    onClick={handleSendReport}
-                    disabled={sendingReport}
-                    size="small"
-                  >
-                    {sendingReport ? 'Sending...' : 'Send to Agent'}
-                  </Button>
-                )}
-                {generatedReport.sent_to_agent && (
-                  <Alert severity="info" sx={{ flex: 1 }}>
-                    Report has been sent to the agent.
-                  </Alert>
-                )}
-              </Box>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => { setReportDialog(false); setGeneratedReport(null); }}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Document Visibility Dialog (Feature #11) */}
-      <Dialog open={docVisibilityDialog.open} onClose={() => setDocVisibilityDialog({ open: false, file: null })} maxWidth="sm" fullWidth>
-        <DialogTitle>Document Visibility</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select which team members can view this document. Leave empty to allow all members to view it.
-          </Typography>
-          <FormControl fullWidth>
-            <InputLabel>Visible To</InputLabel>
-            <Select
-              multiple
-              value={docVisibleTo}
-              onChange={(e) => setDocVisibleTo(e.target.value)}
-              input={<OutlinedInput label="Visible To" />}
-              renderValue={(selected) => selected
-                .map((uid) => visibilityMembers.find((m) => Number(m.id) === Number(uid))?.name || uid)
-                .join(', ')}
-            >
-              {visibilityMembers.map((member) => {
-                const userId = Number(member.id);
-                const name = member.name;
-                return (
-                  <MenuItem key={userId} value={userId}>
-                    <Checkbox checked={docVisibleTo.some((id) => Number(id) === userId)} />
-                    <ListItemText primary={name} secondary={member.role} />
-                  </MenuItem>
-                );
-              })}
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDocVisibilityDialog({ open: false, file: null })}>Cancel</Button>
-          <Button variant="contained" onClick={handleDocumentUpload}>Upload</Button>
-        </DialogActions>
-      </Dialog>
+      <ProjectDetailDialogs
+        rejectPaymentDialog={rejectPaymentDialog}
+        paymentLoading={paymentLoading}
+        onCloseRejectPaymentDialog={() => setRejectPaymentDialog(false)}
+        paymentRejectReason={paymentRejectReason}
+        onChangePaymentRejectReason={setPaymentRejectReason}
+        onConfirmRejectPayment={handleRejectPayment}
+        cancelDialog={cancelDialog}
+        cancelLoading={cancelLoading}
+        onCloseCancelDialog={() => setCancelDialog(false)}
+        cancelReason={cancelReason}
+        onChangeCancelReason={setCancelReason}
+        onConfirmCancellation={handleRequestCancellation}
+        agentPaymentDialog={agentPaymentDialog}
+        agentPaymentLoading={agentPaymentLoading}
+        onCloseAgentPaymentDialog={() => setAgentPaymentDialog(false)}
+        agentPaymentAmount={agentPaymentAmount}
+        onChangeAgentPaymentAmount={setAgentPaymentAmount}
+        agentPaymentNotes={agentPaymentNotes}
+        onChangeAgentPaymentNotes={setAgentPaymentNotes}
+        onConfirmAgentPayment={handleRecordAgentPayment}
+        reportDialog={reportDialog}
+        onCloseReportDialog={() => {
+          setReportDialog(false);
+          setGeneratedReport(null);
+        }}
+        generatedReport={generatedReport}
+        sendingReport={sendingReport}
+        onSendReport={handleSendReport}
+        docVisibilityDialog={docVisibilityDialog}
+        onCloseDocVisibilityDialog={() => setDocVisibilityDialog({ open: false, file: null })}
+        docVisibleTo={docVisibleTo}
+        onChangeDocVisibleTo={setDocVisibleTo}
+        visibilityMembers={visibilityMembers}
+        onUploadDocument={handleDocumentUpload}
+      />
     </Box>
   );
 }

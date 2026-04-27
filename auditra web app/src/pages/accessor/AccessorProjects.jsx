@@ -9,7 +9,7 @@ import { Map, PictureAsPdf } from '@mui/icons-material';
 import projectService from '../../services/projectService';
 import valuationService from '../../services/valuationService';
 import { viewValuationPDF } from '../../utils/generateValuationPDF';
-import ProjectsTabFilters from '../../components/ProjectsTabFilters';
+import TabFilters from '../../components/TabFilters';
 import ProjectValuationReviewTable from '../../components/ProjectValuationReviewTable';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { formatDate, getStatusColor, getPriorityColor, capitalize } from '../../utils/helpers';
@@ -155,13 +155,13 @@ export default function AccessorProjects() {
     <Box>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>My Projects</Typography>
 
-      <ProjectsTabFilters
+      <TabFilters
         tab={tabValue}
         onTabChange={setTabValue}
         tabs={[
-          { key: 'all', label: `All (${projects.length})` },
-          { key: 'in_progress', label: 'In Progress' },
-          { key: 'completed', label: 'Completed' },
+          { key: 'all', value: 0, label: 'All', count: projects.length, colorKey: 'all' },
+          { key: 'in_progress', value: 1, label: 'In Progress', colorKey: 'accepted' },
+          { key: 'completed', value: 2, label: 'Completed', colorKey: 'accepted' },
         ]}
         tabsSx={{ borderBottom: 1, borderColor: 'divider' }}
         wrapTabsInPaper

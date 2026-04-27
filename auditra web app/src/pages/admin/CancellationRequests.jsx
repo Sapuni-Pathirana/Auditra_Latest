@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from 'react';
 import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Button, Alert, Tabs, Tab, Dialog,
+  TableHead, TableRow, Paper, Button, Alert, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, IconButton,
   Collapse, Grid, Chip
 } from '@mui/material';
@@ -11,6 +11,7 @@ import {
 import projectService from '../../services/projectService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
+import TabFilters from '../../components/TabFilters';
 import { formatDateTime } from '../../utils/helpers';
 
 /* ------------------------------------------------------------------ */
@@ -141,12 +142,17 @@ export default function CancellationRequests() {
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
 
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label={`All (${allRequests.length})`} />
-        <Tab label={`Pending (${pendingCount})`} />
-        <Tab label={`Approved (${approvedCount})`} />
-        <Tab label={`Rejected (${rejectedCount})`} />
-      </Tabs>
+      <TabFilters
+        tab={tab}
+        onTabChange={setTab}
+        tabs={[
+          { key: 0, value: 0, label: 'All', count: allRequests.length, colorKey: 'all' },
+          { key: 1, value: 1, label: 'Pending', count: pendingCount, colorKey: 'pending' },
+          { key: 2, value: 2, label: 'Approved', count: approvedCount, colorKey: 'accepted' },
+          { key: 3, value: 3, label: 'Rejected', count: rejectedCount, colorKey: 'rejected' },
+        ]}
+        tabsSx={{ mb: 2 }}
+      />
 
       <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
         <Table size="small">

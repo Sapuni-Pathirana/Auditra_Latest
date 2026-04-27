@@ -13,9 +13,9 @@ import RegisterPage from './pages/auth/RegisterPage';
 // Admin pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
-import AttendanceSummary from './pages/admin/AttendanceSummary';
-import LeaveManagement from './pages/admin/LeaveManagement';
-import PaymentManagement from './pages/admin/PaymentManagement';
+import AttendanceSummary from './pages/hr/AttendanceSummary';
+import LeaveManagement from './pages/hr/LeaveManagement';
+import PaymentManagement from './pages/hr/PaymentManagement';
 import RemovalRequests from './pages/admin/RemovalRequests';
 import SystemLogs from './pages/admin/SystemLogs';
 import ClientSubmissions from './pages/admin/ClientSubmissions';
@@ -29,14 +29,11 @@ import AllProjectItems from './pages/admin/AllProjectItems';
 import CoordinatorDashboard from './pages/coordinator/CoordinatorDashboard';
 import ProjectList from './pages/coordinator/ProjectList';
 import CreateProject from './pages/coordinator/CreateProject';
-import ProjectDetail from './pages/coordinator/ProjectDetail';
 import EditProject from './pages/coordinator/EditProject';
 import AssignedSubmissions from './pages/coordinator/AssignedSubmissions';
 
 // HR pages
 import HRDashboard from './pages/hr/HRDashboard';
-import LeaveRequests from './pages/hr/LeaveRequests';
-import AttendanceView from './pages/hr/AttendanceView';
 import RemovalRequest from './pages/hr/RemovalRequest';
 
 // Accessor pages
@@ -65,6 +62,7 @@ import NotificationsPage from './pages/shared/NotificationsPage';
 import ProjectStandups from './pages/shared/ProjectStandups';
 import ProjectStandupsPage from './pages/shared/ProjectStandupsPage';
 import MyProjects from './pages/shared/MyProjects';
+import ProjectDetailPage from './pages/shared/ProjectDetailPage';
 
 // Field Officer
 import FieldOfficerDashboard from './pages/field-officer/FieldOfficerDashboard';
@@ -152,12 +150,18 @@ export default function App() {
         <Route path="cancellation-requests" element={<ProtectedRoute allowedRoles={['admin']}><CancellationRequests /></ProtectedRoute>} />
         <Route path="direct-project-approvals" element={<ProtectedRoute allowedRoles={['admin']}><DirectProjectApprovals /></ProtectedRoute>} />
 
-        {/* HR Head routes (also accessible by admin) */}
-        <Route path="attendance-summary" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><AttendanceSummary /></ProtectedRoute>} />
-        <Route path="leave-management" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><LeaveManagement /></ProtectedRoute>} />
-        <Route path="payments" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><PaymentManagement /></ProtectedRoute>} />
-        <Route path="leave-requests" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><LeaveRequests /></ProtectedRoute>} />
-        <Route path="attendance-view" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><AttendanceView /></ProtectedRoute>} />
+        {/* HR Head routes */}
+        <Route path="attendance-summary" element={<ProtectedRoute allowedRoles={['hr_head']}><AttendanceSummary /></ProtectedRoute>} />
+        <Route path="leave-management" element={<ProtectedRoute allowedRoles={['hr_head']}><LeaveManagement /></ProtectedRoute>} />
+        <Route path="payments" element={<ProtectedRoute allowedRoles={['hr_head']}><PaymentManagement /></ProtectedRoute>} />
+        <Route
+          path="leave-requests"
+          element={<ProtectedRoute allowedRoles={['hr_head']}><Navigate to="/dashboard/leave-management" replace /></ProtectedRoute>}
+        />
+        <Route
+          path="attendance-view"
+          element={<ProtectedRoute allowedRoles={['hr_head']}><Navigate to="/dashboard/attendance-summary" replace /></ProtectedRoute>}
+        />
         <Route path="request-removal" element={<ProtectedRoute allowedRoles={['admin', 'hr_head']}><RemovalRequest /></ProtectedRoute>} />
 
         {/* Coordinator routes */}
@@ -165,7 +169,7 @@ export default function App() {
         <Route path="projects" element={<ProtectedRoute allowedRoles={['admin', 'coordinator']}><ProjectList /></ProtectedRoute>} />
         <Route path="projects/create" element={<ProtectedRoute allowedRoles={['coordinator']}><CreateProject /></ProtectedRoute>} />
         <Route path="projects/:id/edit" element={<ProtectedRoute allowedRoles={['coordinator']}><EditProject /></ProtectedRoute>} />
-        <Route path="projects/:id" element={<ProjectDetail />} />
+        <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="projects/:projectId/standups" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'field_officer', 'accessor', 'senior_valuer', 'md_gm']}><ProjectStandupsPage /></ProtectedRoute>} />
 
         {/* Accessor routes */}

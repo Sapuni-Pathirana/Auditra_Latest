@@ -1,16 +1,20 @@
 import { useState, useEffect, Fragment } from 'react';
 import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Button, Alert, Tabs, Tab, TextField, InputAdornment,
+  TableHead, TableRow, Paper, Button, Alert, TextField, InputAdornment,
   IconButton, Collapse, Chip, Stack,
 } from '@mui/material';
 import { Check, Close, Search, KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
-import leaveService from '../../services/leaveService';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import StatusChip from '../../components/StatusChip';
-import { formatDate } from '../../utils/helpers';
+import leaveService from '../services/leaveService';
+import LoadingSpinner from './LoadingSpinner';
+import StatusChip from './StatusChip';
+import TabFilters from './TabFilters';
+import { formatDate } from '../utils/helpers';
 
-export default function LeaveManagement() {
+export default function LeaveRequestsView({
+  title = 'Leave Management',
+  subtitle = '',
+}) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -64,16 +68,26 @@ export default function LeaveManagement() {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Leave Management</Typography>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: subtitle ? 1 : 3 }}>{title}</Typography>
+      {subtitle && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          {subtitle}
+        </Typography>
+      )}
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
 
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label={`All (${requests.length})`} />
-        <Tab label={`Pending (${requests.filter(r => r.status === 'pending').length})`} />
-        <Tab label="Approved" />
-        <Tab label="Rejected" />
-      </Tabs>
+      <TabFilters
+        tab={tab}
+        onTabChange={setTab}
+        tabs={[
+          { key: 0, value: 0, label: 'All', count: requests.length, colorKey: 'all' },
+          { key: 1, value: 1, label: 'Pending', count: requests.filter(r => r.status === 'pending').length, colorKey: 'pending' },
+          { key: 2, value: 2, label: 'Approved', colorKey: 'accepted' },
+          { key: 3, value: 3, label: 'Rejected', colorKey: 'rejected' },
+        ]}
+        tabsSx={{ mb: 2 }}
+      />
 
       <TextField
         placeholder="Search by employee name or employee ID..."

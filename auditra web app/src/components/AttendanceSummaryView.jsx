@@ -1,21 +1,27 @@
 import { useState, useEffect } from 'react';
 import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Alert, Tabs, Tab, Chip, TextField, InputAdornment,
+  TableHead, TableRow, Paper, Alert, Chip, TextField, InputAdornment, Snackbar, CircularProgress,
 } from '@mui/material';
-import attendanceService from '../../services/attendanceService';
-import LoadingSpinner from '../../components/LoadingSpinner';
 import { Search } from '@mui/icons-material';
+import attendanceService from '../services/attendanceService';
+import LoadingSpinner from './LoadingSpinner';
+import TabFilters from './TabFilters';
 
 const PERIODS = ['daily', 'weekly', 'monthly'];
 
-export default function AttendanceSummary() {
+export default function AttendanceSummaryView({
+  title = 'Attendance Summary',
+  subtitle = 'View employee attendance across different periods',
+  useSnackbarForErrors = false,
+}) {
   const [records, setRecords] = useState([]);
   const [meta, setMeta] = useState({});
   const [period, setPeriod] = useState('daily');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'error' });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -27,13 +33,13 @@ export default function AttendanceSummary() {
           const res = await attendanceService.getHRAttendanceSummary(period);
           resData = res.data;
         } catch {
-          // HR endpoint not available, fall back to weekly summary
           const res = await attendanceService.getWeeklySummary();
           resData = res.data;
           if (period !== 'weekly') {
             setPeriod('weekly');
           }
         }
+
         setRecords(Array.isArray(resData?.data) ? resData.data : []);
         setMeta({
           startDate: resData?.start_date || resData?.week_start,
@@ -41,13 +47,18 @@ export default function AttendanceSummary() {
           workingDays: resData?.working_days,
         });
       } catch (err) {
-        setError(err.response?.data?.error || 'Failed to load attendance summary');
+        const message = err.response?.data?.error || 'Failed to load attendance summary';
+        if (useSnackbarForErrors) {
+          setSnackbar({ open: true, message, severity: 'error' });
+        } else {
+          setError(message);
+        }
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [period]);
+  }, [period, useSnackbarForErrors]);
 
   const STATUS_COLORS = {
     present: '#1565C0',
@@ -64,7 +75,7 @@ export default function AttendanceSummary() {
 
   const isDaily = period === 'daily';
 
-  const filteredRecords = records.filter(r => {
+  const filteredRecords = records.filter((r) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (r.employee_name || '').toLowerCase().includes(q) ||
@@ -73,28 +84,29 @@ export default function AttendanceSummary() {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>Attendance Summary</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        View employee attendance across different periods
-      </Typography>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: subtitle ? 1 : 3 }}>{title}</Typography>
+      {subtitle && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {subtitle}
+        </Typography>
+      )}
 
       <Paper sx={{ mb: 2 }}>
-        <Tabs
-          value={PERIODS.indexOf(period)}
-          onChange={(_, idx) => setPeriod(PERIODS[idx])}
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
-        >
-          <Tab label="Daily" />
-          <Tab label="Weekly" />
-          <Tab label="Monthly" />
-        </Tabs>
+        <TabFilters
+          tab={PERIODS.indexOf(period)}
+          onTabChange={(idx) => setPeriod(PERIODS[idx])}
+          tabs={[
+            { key: 0, value: 0, label: 'Daily', colorKey: 'all' },
+            { key: 1, value: 1, label: 'Weekly', colorKey: 'accepted' },
+            { key: 2, value: 2, label: 'Monthly', colorKey: 'pending' },
+          ]}
+          tabsSx={{ borderBottom: 1, borderColor: 'divider' }}
+        />
       </Paper>
 
       {meta.startDate && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {meta.startDate === meta.endDate
-            ? meta.startDate
-            : `${meta.startDate} — ${meta.endDate}`}
+          {meta.startDate === meta.endDate ? meta.startDate : `${meta.startDate} — ${meta.endDate}`}
           {meta.workingDays != null && ` • ${meta.workingDays} working day${meta.workingDays !== 1 ? 's' : ''}`}
         </Typography>
       )}
@@ -114,7 +126,13 @@ export default function AttendanceSummary() {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {loading ? (
-        <LoadingSpinner />
+        useSnackbarForErrors ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <LoadingSpinner />
+        )
       ) : (
         <TableContainer component={Paper} sx={{ maxHeight: 500, overflow: 'auto' }}>
           <Table size="small" stickyHeader sx={{ tableLayout: 'fixed' }}>
@@ -211,6 +229,12 @@ export default function AttendanceSummary() {
             </TableBody>
           </Table>
         </TableContainer>
+      )}
+
+      {useSnackbarForErrors && (
+        <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}>
+          <Alert severity={snackbar.severity} onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}>{snackbar.message}</Alert>
+        </Snackbar>
       )}
     </Box>
   );
