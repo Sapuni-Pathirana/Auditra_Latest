@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Test script to verify email configuration and sending
-Run: python manage.py shell < test_email.py
+Run: python email_manual_check.py
 """
 import os
 import django
