@@ -124,6 +124,9 @@ class AppColors {
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
         dividerColor: divider,
+        snackBarTheme: const SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+        ),
       );
 
   static ThemeData get darkTheme => ThemeData(
@@ -163,5 +166,31 @@ class AppColors {
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
         dividerColor: const Color(0xFF334155),
+        snackBarTheme: const SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Color(0xFF334155),
+          contentTextStyle: TextStyle(color: Color(0xFFF8FAFC)),
+        ),
+        listTileTheme: const ListTileThemeData(
+          iconColor: Color(0xFFCBD5E1),
+          textColor: Color(0xFFF1F5F9),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryLight,
+            foregroundColor: Colors.black,
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFFE2E8F0),
+            side: const BorderSide(color: Color(0xFF475569)),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: primaryLight,
+          ),
+        ),
       );
 }

@@ -127,9 +127,11 @@ class SyncEngine {
     final unsyncedValuations = OfflineStorageService.getUnsyncedValuations();
     final unsyncedAttendance = OfflineStorageService.getUnsyncedAttendance();
     final unsyncedPhotos = OfflineStorageService.getUnsyncedPhotos();
+    final unsyncedSubmissions = OfflineStorageService.getUnsyncedSubmitActions();
     final hasUnsyncedItems = unsyncedValuations.isNotEmpty ||
                             unsyncedAttendance.isNotEmpty ||
-                            unsyncedPhotos.isNotEmpty;
+                            unsyncedPhotos.isNotEmpty ||
+                            unsyncedSubmissions.isNotEmpty;
 
     if (!hasUnsyncedItems) {
       if (!silent) print('✅ No unsynced items - skipping sync');
@@ -157,6 +159,11 @@ class SyncEngine {
       final photosResult = await _syncPhotos(silent: silent);
       syncedCount += photosResult['synced'] as int;
       failedCount += photosResult['failed'] as int;
+
+      // Sync queued submit actions
+      final submitResult = await _syncSubmitActions(silent: silent);
+      syncedCount += submitResult['synced'] as int;
+      failedCount += submitResult['failed'] as int;
 
       if (!silent || syncedCount > 0 || failedCount > 0) {
         print('✅ Sync complete: $syncedCount synced, $failedCount failed');
@@ -423,6 +430,44 @@ class SyncEngine {
     return {'synced': synced, 'failed': failed};
   }
 
+  /// Sync queued valuation submit actions.
+  static Future<Map<String, dynamic>> _syncSubmitActions({bool silent = false}) async {
+    final queued = OfflineStorageService.getUnsyncedSubmitActions();
+    if (!silent && queued.isNotEmpty) {
+      print('📤 Syncing ${queued.length} queued report submissions...');
+    }
+
+    int synced = 0;
+    int failed = 0;
+
+    for (final item in queued) {
+      final id = item['id']?.toString();
+      final valuationId = item['valuationId'];
+      if (id == null || valuationId is! int) {
+        failed++;
+        continue;
+      }
+
+      try {
+        await OfflineStorageService.markSubmitActionSyncing(id);
+        final result = await ApiService.submitValuation(valuationId);
+        if (result['success'] == true) {
+          await OfflineStorageService.markSubmitActionSynced(id);
+          synced++;
+          _notifyListeners('submissionSynced', {'valuationId': valuationId});
+        } else {
+          await OfflineStorageService.markSubmitActionFailed(id);
+          failed++;
+        }
+      } catch (_) {
+        await OfflineStorageService.markSubmitActionFailed(id);
+        failed++;
+      }
+    }
+
+    return {'synced': synced, 'failed': failed};
+  }
+
   /// Get sync status
   static Future<Map<String, dynamic>> getStatus() async {
     try {
@@ -431,6 +476,7 @@ class SyncEngine {
         'pendingValuations': stats['unsynced_valuations'] ?? 0,
         'pendingAttendance': stats['unsynced_attendance'] ?? 0,
         'pendingPhotos': stats['unsynced_photos'] ?? 0,
+        'pendingSubmitActions': stats['unsynced_submit_actions'] ?? 0,
         'isOnline': NetworkService.isOnline,
         'isSyncing': _isSyncing,
         'isInitialized': _isInitialized,
@@ -441,6 +487,7 @@ class SyncEngine {
         'pendingValuations': 0,
         'pendingAttendance': 0,
         'pendingPhotos': 0,
+        'pendingSubmitActions': 0,
         'isOnline': NetworkService.isOnline,
         'isSyncing': false,
         'isInitialized': false,

@@ -190,7 +190,9 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0B1220) : const Color(0xFFF5F7FA),
       appBar: AppBar(
         titleSpacing: 0,
         title: Column(
@@ -239,6 +241,7 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   }
 
   Widget _buildMessage(Map<String, dynamic> msg) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final author = (msg['author_name'] ?? '').toString();
     final authorUsername = (msg['author_username'] ?? '').toString();
     final role = (msg['author_role'] ?? '').toString();
@@ -257,7 +260,9 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
       'work_done': Colors.green,
     }[kind];
 
-    final bubbleColor = isMine ? const Color(0xFFDCF8C6) : Colors.white;
+    final bubbleColor = isMine
+        ? (isDark ? const Color(0xFF2E4A32) : const Color(0xFFDCF8C6))
+        : (isDark ? const Color(0xFF111827) : Colors.white);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -282,7 +287,11 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
               decoration: BoxDecoration(
                 color: bubbleColor,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: isMine ? const Color(0xFFB7E3A2) : Colors.grey.shade300),
+                border: Border.all(
+                  color: isMine
+                      ? (isDark ? const Color(0xFF3E6B43) : const Color(0xFFB7E3A2))
+                      : (isDark ? const Color(0xFF334155) : Colors.grey.shade300),
+                ),
                 boxShadow: const [
                   BoxShadow(color: Color(0x14000000), blurRadius: 2, offset: Offset(0, 1)),
                 ],
@@ -391,10 +400,15 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   }
 
   Widget _buildMessageBody(String body) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final words = body.split(RegExp(r'\s+'));
     return RichText(
       text: TextSpan(
-        style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+        style: TextStyle(
+          fontSize: 14,
+          height: 1.4,
+          color: isDark ? Colors.grey[100] : Colors.black87,
+        ),
         children: words.map((word) {
           final isMention = word.startsWith('@');
           return TextSpan(
@@ -409,13 +423,14 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   }
 
   Widget _buildMentionList() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       constraints: const BoxConstraints(maxHeight: 180),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF111827) : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: isDark ? const Color(0xFF334155) : Colors.grey.shade300),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
@@ -444,11 +459,15 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
             ),
             title: Text(
               '@$username',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: isDark ? Colors.grey[100] : Colors.black87,
+              ),
             ),
             subtitle: Text(
               role,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey.shade700),
             ),
             onTap: () => _insertMention(m),
           );
@@ -458,6 +477,7 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   }
 
   Widget _buildTemplateBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     Widget floatingKindButton({
       required String label,
       required IconData icon,
@@ -477,10 +497,12 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: selected ? activeColor.withOpacity(0.15) : Colors.white,
+              color: selected
+                  ? activeColor.withOpacity(0.15)
+                  : (isDark ? const Color(0xFF111827) : Colors.white),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: selected ? activeColor : Colors.grey.shade300,
+                color: selected ? activeColor : (isDark ? const Color(0xFF334155) : Colors.grey.shade300),
                 width: selected ? 1.5 : 1,
               ),
             ),
@@ -494,7 +516,7 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: selected ? activeColor : Colors.black87,
+                    color: selected ? activeColor : (isDark ? Colors.grey[100] : Colors.black87),
                   ),
                 ),
               ],
@@ -527,10 +549,11 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
   }
 
   Widget _buildInputBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -565,7 +588,7 @@ class _ProjectStandupsScreenState extends State<ProjectStandupsScreen> {
                   decoration: InputDecoration(
                     hintText: 'Type a message...',
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: isDark ? const Color(0xFF111827) : Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: const BorderSide(color: AppColors.primary, width: 1.5),

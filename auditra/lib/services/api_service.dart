@@ -1,7 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'network_service.dart';
+import 'offline_db_service.dart';
+import 'offline_storage_service.dart';
 
 class ApiService {
   // Change this to your computer's IP address when testing on physical device
@@ -906,6 +910,138 @@ class ApiService {
     }
   }
 
+  // Project visit scheduling (Field Officer)
+  static Future<Map<String, dynamic>> getProjectVisits(int projectId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var token = prefs.getString('access_token');
+      if (token == null) return {'success': false, 'message': 'Not authenticated'};
+
+      var response = await http.get(
+        Uri.parse('$baseUrl/projects/$projectId/visits/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 401) {
+        final refreshResult = await refreshToken();
+        if (refreshResult['success'] == true) {
+          token = prefs.getString('access_token');
+          response = await http.get(
+            Uri.parse('$baseUrl/projects/$projectId/visits/'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          );
+        } else {
+          return {
+            'success': false,
+            'message': refreshResult['message'] ?? 'Session expired. Please login again.',
+          };
+        }
+      }
+
+      final dynamic data = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+      if (response.statusCode == 200) {
+        final visits = data is List ? data : (data is Map<String, dynamic> ? (data['results'] ?? <dynamic>[]) : <dynamic>[]);
+        return {'success': true, 'data': visits};
+      }
+      final message = data is Map<String, dynamic>
+          ? (data['detail'] ?? data['error'] ?? data['message'] ?? 'Failed to load valuation dates')
+          : 'Failed to load valuation dates';
+      return {'success': false, 'message': message.toString()};
+    } catch (e) {
+      final errorText = e.toString();
+      final isNetworkError =
+          e is SocketException ||
+          errorText.contains('ClientException') ||
+          errorText.contains('Connection failed') ||
+          errorText.contains('Connection refused') ||
+          errorText.contains('Failed host lookup') ||
+          errorText.contains('Network is unreachable') ||
+          errorText.contains('timed out');
+      if (isNetworkError) {
+        return {
+          'success': false,
+          'message': 'You are offline. Connect to the internet to load valuation dates.',
+        };
+      }
+      return {'success': false, 'message': 'Connection error: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> scheduleProjectVisit({
+    required int projectId,
+    required DateTime scheduledDate,
+    String? notes,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var token = prefs.getString('access_token');
+      if (token == null) return {'success': false, 'message': 'Not authenticated'};
+
+      var response = await http.post(
+        Uri.parse('$baseUrl/projects/$projectId/visits/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'scheduled_date': DateFormat('yyyy-MM-dd').format(scheduledDate),
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        }),
+      );
+
+      if (response.statusCode == 401) {
+        final refreshResult = await refreshToken();
+        if (refreshResult['success'] == true) {
+          token = prefs.getString('access_token');
+          response = await http.post(
+            Uri.parse('$baseUrl/projects/$projectId/visits/'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'scheduled_date': DateFormat('yyyy-MM-dd').format(scheduledDate),
+              if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+            }),
+          );
+        } else {
+          return {
+            'success': false,
+            'message': refreshResult['message'] ?? 'Session expired. Please login again.',
+          };
+        }
+      }
+
+      final dynamic data = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {'success': true, 'data': data};
+      }
+
+      String message = 'Failed to set valuation date';
+      if (data is Map<String, dynamic>) {
+        final detail = data['detail'] ?? data['error'] ?? data['message'];
+        if (detail is String && detail.trim().isNotEmpty) {
+          message = detail;
+        } else {
+          // DRF validation error map
+          final firstValue = data.values.isNotEmpty ? data.values.first : null;
+          if (firstValue is List && firstValue.isNotEmpty) {
+            message = firstValue.first.toString();
+          }
+        }
+      }
+      return {'success': false, 'message': message};
+    } catch (e) {
+      return {'success': false, 'message': 'Connection error: $e'};
+    }
+  }
+
   // Create project
   static Future<Map<String, dynamic>> createProject({
     required String title,
@@ -1662,14 +1798,36 @@ class ApiService {
       }
 
       final response = await http.post(
-        Uri.parse('$baseUrl/projects/$projectId/submit/'),
+        Uri.parse('$baseUrl/projects/$projectId/start-project/'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
       );
 
-      final data = jsonDecode(response.body);
+      // Guard against Django HTML error pages (404/500) to avoid FormatException
+      final body = response.body.trim();
+      if (body.startsWith('<!DOCTYPE') || body.startsWith('<html')) {
+        return {
+          'success': false,
+          'message': 'Server returned HTML. Submit endpoint may be missing or backend has an error.',
+        };
+      }
+
+      Map<String, dynamic> data = {};
+      if (body.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(body);
+          if (decoded is Map<String, dynamic>) {
+            data = decoded;
+          }
+        } catch (_) {
+          return {
+            'success': false,
+            'message': 'Invalid response from server while submitting project.',
+          };
+        }
+      }
 
       if (response.statusCode == 200) {
         return {'success': true, 'data': data};
@@ -1747,6 +1905,25 @@ class ApiService {
 
   static Future<Map<String, dynamic>> createValuation(Map<String, dynamic> valuationData) async {
     try {
+      // Field officers can work fully offline: queue valuation locally when
+      // there is no real network/backend connectivity.
+      final offlineModeEnabled = await OfflineDBService.isOfflineModeEnabled();
+      if (offlineModeEnabled) {
+        if (!NetworkService.isInitialized) {
+          await NetworkService.init();
+        }
+        final isOnline = await NetworkService.checkConnectivity();
+        if (!isOnline) {
+          final localId = await OfflineStorageService.saveValuationOffline(valuationData);
+          return {
+            'success': true,
+            'synced': false,
+            'data': {'localId': localId, ...valuationData},
+            'message': 'Saved offline. Will sync automatically when online.',
+          };
+        }
+      }
+
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('access_token');
 
@@ -1826,6 +2003,32 @@ class ApiService {
         return {'success': false, 'message': errorMessage};
       }
     } catch (e) {
+      // Network failures in offline mode should queue locally instead of showing
+      // a blocking connection error to field officers.
+      final errorText = e.toString();
+      final isNetworkFailure =
+          e is SocketException ||
+          errorText.contains('ClientException') ||
+          errorText.contains('Connection failed') ||
+          errorText.contains('Connection refused') ||
+          errorText.contains('Failed host lookup') ||
+          errorText.contains('Network is unreachable') ||
+          errorText.contains('timed out');
+
+      if (isNetworkFailure && await OfflineDBService.isOfflineModeEnabled()) {
+        try {
+          final localId = await OfflineStorageService.saveValuationOffline(valuationData);
+          return {
+            'success': true,
+            'synced': false,
+            'data': {'localId': localId, ...valuationData},
+            'message': 'Saved offline. Will sync automatically when online.',
+          };
+        } catch (_) {
+          // Fall through to the original connection error if offline queue fails.
+        }
+      }
+
       return {'success': false, 'message': 'Connection error: $e'};
     }
   }

@@ -17,22 +17,45 @@ const STATUS_COLORS = {
 export default function InvitationTracking() {
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
     setLoading(true);
+    setError('');
     const params = {};
     if (roleFilter) params.role = roleFilter;
     if (statusFilter) params.status = statusFilter;
-    axiosClient.get('/auth/invitations/', { params }).then((res) => {
-      setInvitations(Array.isArray(res.data) ? res.data : []);
-    }).finally(() => setLoading(false));
+    axiosClient.get('/auth/invitations/', { params })
+      .then((res) => {
+        const payload = res?.data;
+        const list =
+          (Array.isArray(payload) && payload) ||
+          (Array.isArray(payload?.data) && payload.data) ||
+          (Array.isArray(payload?.results) && payload.results) ||
+          [];
+        setInvitations(list);
+      })
+      .catch((err) => {
+        const msg =
+          err?.response?.data?.error ||
+          err?.response?.data?.detail ||
+          'Failed to load invitations';
+        setError(msg);
+        setInvitations([]);
+      })
+      .finally(() => setLoading(false));
   }, [roleFilter, statusFilter]);
 
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5" fontWeight={700} mb={3}>Invitation Tracking</Typography>
+      {error && (
+        <Typography variant="body2" color="error" mb={2}>
+          {error}
+        </Typography>
+      )}
 
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <FormControl size="small" sx={{ minWidth: 160 }}>

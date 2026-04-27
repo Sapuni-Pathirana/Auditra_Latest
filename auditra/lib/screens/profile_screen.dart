@@ -111,6 +111,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final themeService = Provider.of<ThemeService>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final roleInfo = (_profile?['role_info'] as Map?)?.cast<String, dynamic>() ?? const {};
     final roleLabel = roleInfo['role_display'] ?? roleInfo['role'] ?? '';
 
@@ -179,22 +180,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _field('Phone', _phoneCtrl),
                       _field('Bio', _bioCtrl, maxLines: 3),
                       const SizedBox(height: 24),
-                      _sectionLabel('Preferences'),
+                      _sectionLabel('Appearance'),
                       Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.brightness_6),
-                          title: const Text('Theme'),
-                          trailing: DropdownButton<String>(
-                            value: themeService.preference,
-                            underline: const SizedBox.shrink(),
-                            items: const [
-                              DropdownMenuItem(value: 'light', child: Text('Light')),
-                              DropdownMenuItem(value: 'dark', child: Text('Dark')),
-                              DropdownMenuItem(value: 'system', child: Text('System')),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: isDark ? const Color(0xFF334155) : Colors.grey.shade200,
+                          ),
+                        ),
+                        color: isDark ? const Color(0xFF111827) : Colors.white,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Choose your preferred theme',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? const Color(0xFF94A3B8)
+                                      : AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _themeOptionCard(
+                                      value: 'system',
+                                      title: 'Default',
+                                      subtitle: 'Follow device',
+                                      icon: Icons.monitor_rounded,
+                                      selected: themeService.preference == 'system',
+                                      previewColor: const Color(0xFF4FAEB4),
+                                      isDark: isDark,
+                                      onTap: () => themeService.setMode('system'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _themeOptionCard(
+                                      value: 'light',
+                                      title: 'Light',
+                                      subtitle: 'Bright layout',
+                                      icon: Icons.light_mode_rounded,
+                                      selected: themeService.preference == 'light',
+                                      previewColor: const Color(0xFF4FAEB4),
+                                      isDark: isDark,
+                                      onTap: () => themeService.setMode('light'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _themeOptionCard(
+                                      value: 'dark',
+                                      title: 'Dark',
+                                      subtitle: 'Low-light mode',
+                                      icon: Icons.dark_mode_rounded,
+                                      selected: themeService.preference == 'dark',
+                                      previewColor: const Color(0xFF0B1220),
+                                      isDark: isDark,
+                                      onTap: () => themeService.setMode('dark'),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
-                            onChanged: (v) {
-                              if (v != null) themeService.setMode(v);
-                            },
                           ),
                         ),
                       ),
@@ -227,4 +280,151 @@ class _ProfileScreenState extends State<ProfileScreen> {
           decoration: InputDecoration(labelText: label),
         ),
       );
+
+  Widget _themeOptionCard({
+    required String value,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool selected,
+    required Color previewColor,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? AppColors.primary
+                  : (isDark ? const Color(0xFF334155) : Colors.grey.shade300),
+              width: selected ? 2 : 1,
+            ),
+            boxShadow: isDark
+                ? []
+                : [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+          ),
+          child: Column(
+            children: [
+              _themePreview(
+                previewColor: previewColor,
+                dark: value == 'dark',
+                isDarkUi: isDark,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 16,
+                    color: selected
+                        ? AppColors.primary
+                        : (isDark ? const Color(0xFFE2E8F0) : Colors.black87),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: selected
+                          ? AppColors.primary
+                          : (isDark ? const Color(0xFFE2E8F0) : Colors.black87),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark
+                      ? const Color(0xFF94A3B8)
+                      : AppColors.textSecondary,
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _themePreview({
+    required Color previewColor,
+    required bool dark,
+    required bool isDarkUi,
+  }) {
+    return Container(
+      height: 58,
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF0F172A) : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDarkUi ? const Color(0xFF334155) : Colors.grey.shade200,
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: Container(
+              height: 10,
+              decoration: BoxDecoration(
+                color: previewColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(10),
+                  topRight: Radius.circular(10),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 8,
+            top: 16,
+            right: 8,
+            child: Container(
+              height: 6,
+              decoration: BoxDecoration(
+                color: dark ? Colors.white24 : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 8,
+            top: 28,
+            right: 24,
+            child: Container(
+              height: 5,
+              decoration: BoxDecoration(
+                color: dark ? Colors.white12 : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(5),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

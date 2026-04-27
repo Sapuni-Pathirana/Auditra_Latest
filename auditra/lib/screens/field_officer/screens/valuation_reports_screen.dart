@@ -129,9 +129,10 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
     // Use current project data or fallback to initial widget data
     final project = _currentProject ?? widget.project;
     final valuations = project.valuations;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
@@ -220,7 +221,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                           'No valuation reports yet',
                           style: TextStyle(
                             fontSize: 18,
-                            color: Colors.grey[600],
+                            color: isDark ? Colors.grey[300] : Colors.grey[600],
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -229,7 +230,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                           'Tap the + button to create one',
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[500],
+                            color: isDark ? Colors.grey[400] : Colors.grey[500],
                           ),
                         ),
                       ],
@@ -265,6 +266,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
   }
 
   Widget _buildReportCard(Valuation valuation, Project project) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusColor =
         FieldOfficerUiHelpers.getValuationStatusColor(valuation.status);
     final isDraft = valuation.status == 'draft';
@@ -273,11 +275,11 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(isDark ? 0.26 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -304,7 +306,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isDark ? const Color(0xFF0B1220) : Colors.white,
                     shape: BoxShape.circle,
                     border: Border.all(color: statusColor.withOpacity(0.3)),
                   ),
@@ -318,9 +320,10 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                 Expanded(
                   child: Text(
                     valuation.categoryDisplay,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
                   ),
                 ),
@@ -383,7 +386,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                             'Estimated Value',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: isDark ? Colors.grey[400] : Colors.grey[600],
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -406,16 +409,17 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                             'Date',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: isDark ? Colors.grey[400] : Colors.grey[600],
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             DateFormat('MMM dd, yyyy')
                                 .format(valuation.createdAt),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
+                              color: isDark ? Colors.grey[200] : Colors.black87,
                             ),
                           ),
                         ],
@@ -431,7 +435,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.grey[700],
+                      color: isDark ? Colors.grey[300] : Colors.grey[700],
                       fontSize: 13,
                     ),
                   ),

@@ -6,7 +6,7 @@ import string
 import re
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from authentication.models import UserRole
+from authentication.models import UserRole, Invitation
 from authentication.services import EmailService
 
 
@@ -169,7 +169,7 @@ def create_user_account(email, name, role_type, phone=None, address=None, compan
         return None, None
 
 
-def process_client_for_project(project, client_info):
+def process_client_for_project(project, client_info, invited_by=None):
     """
     Process client information for project creation
     - Check if client exists by email, assign if exists
@@ -232,14 +232,28 @@ def process_client_for_project(project, client_info):
             print(f"[CLIENT_EMAIL] Successfully sent credentials to {email}")
         else:
             print(f"[CLIENT_EMAIL] FAILED to send credentials to {email}")
-        
+
+        # Track invitation for admin Invitations page.
+        try:
+            Invitation.objects.update_or_create(
+                email=(email or '').lower(),
+                defaults={
+                    'user': user,
+                    'role': 'client',
+                    'status': 'sent',
+                    'invited_by': invited_by,
+                },
+            )
+        except Exception:
+            pass
+
 
         return user, True, None
     else:
         return None, False, "Failed to create client account"
 
 
-def process_agent_for_project(project, agent_info):
+def process_agent_for_project(project, agent_info, invited_by=None):
     """
     Process agent information for project creation
     - Check if agent exists by email, assign if exists
@@ -296,6 +310,20 @@ def process_agent_for_project(project, agent_info):
             role='Agent',
             salary=UserRole.ROLE_SALARIES.get('agent', 0)
         )
+
+        # Track invitation for admin Invitations page.
+        try:
+            Invitation.objects.update_or_create(
+                email=(email or '').lower(),
+                defaults={
+                    'user': user,
+                    'role': 'agent',
+                    'status': 'sent',
+                    'invited_by': invited_by,
+                },
+            )
+        except Exception:
+            pass
 
         return user, True, None
     else:

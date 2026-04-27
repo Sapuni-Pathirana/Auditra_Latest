@@ -257,7 +257,11 @@ class ProjectListView(generics.ListCreateAPIView):
         # Process client info - check/create account and assign to project
         client_info = project.client_info
         if client_info and client_info.get('email'):
-            client_user, was_created, error = process_client_for_project(project, client_info)
+            client_user, was_created, error = process_client_for_project(
+                project,
+                client_info,
+                invited_by=self.request.user,
+            )
             if error:
                 logger.warning(f"Client processing warning for project {project.id}: {error}")
             elif client_user:
@@ -271,7 +275,11 @@ class ProjectListView(generics.ListCreateAPIView):
         # Process agent info - check/create account and assign to project
         agent_info = project.agent_info
         if agent_info and agent_info.get('email'):
-            agent_user, was_created, error = process_agent_for_project(project, agent_info)
+            agent_user, was_created, error = process_agent_for_project(
+                project,
+                agent_info,
+                invited_by=self.request.user,
+            )
             if error:
                 logger.warning(f"Agent processing warning for project {project.id}: {error}")
             elif agent_user:
@@ -3268,7 +3276,9 @@ class ProjectVisitModelSerializer(drf_serializers.ModelSerializer):
     class Meta:
         model = ProjectVisit
         fields = ['id', 'project', 'field_officer', 'field_officer_name', 'scheduled_date', 'note', 'notes', 'status', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'field_officer', 'field_officer_name', 'created_at', 'updated_at']
+        # project and field_officer are injected by the view (URL + authenticated user)
+        # so clients (mobile/web) should not be forced to send them in payload.
+        read_only_fields = ['id', 'project', 'field_officer', 'field_officer_name', 'created_at', 'updated_at']
 
     def get_field_officer_name(self, obj):
         return obj.field_officer.get_full_name() or obj.field_officer.username

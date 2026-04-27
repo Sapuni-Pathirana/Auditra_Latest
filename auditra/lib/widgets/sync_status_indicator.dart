@@ -66,7 +66,8 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
           }
           _pendingCount = (status['pendingValuations'] as int? ?? 0) +
               (status['pendingAttendance'] as int? ?? 0) +
-              (status['pendingPhotos'] as int? ?? 0);
+              (status['pendingPhotos'] as int? ?? 0) +
+              (status['pendingSubmitActions'] as int? ?? 0);
         });
       }
     } catch (e) {
