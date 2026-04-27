@@ -182,6 +182,31 @@ celery -A auditra_backend beat -l info
 
 The API will be available at `http://localhost:8000/api/`.
 
+### Running backend tests
+
+From the `backend/` directory, with the virtual environment activated and dependencies installed, run the Django test suite with `manage.py test`.
+
+```bash
+cd backend
+venv\Scripts\activate        # Windows
+# source venv/bin/activate     # macOS / Linux
+
+# Run all tests (discovers tests under each installed app’s tests/ package)
+python manage.py test
+
+# Run tests for one or more apps by app label
+python manage.py test notifications
+python manage.py test authentication catalog projects
+
+# Typical full pass across main API apps (optional explicit list)
+python manage.py test attendance authentication catalog notifications projects reports reports_v2 standups system_logs valuations
+
+# More verbose output (test names and failures)
+python manage.py test -v 2
+```
+
+Django uses a **separate test database** (usually named with a `test_` prefix) created from your `DATABASES` settings, then dropped when the run finishes. PostgreSQL must be running, and the DB user should be allowed to create databases. Other settings (e.g. `EMAIL_BACKEND` in tests) may be overridden by test cases so real emails are not sent.
+
 ### 3. Web App Setup
 
 ```bash
