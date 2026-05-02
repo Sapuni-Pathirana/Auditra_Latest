@@ -161,7 +161,7 @@ venv\Scripts\activate    # Windows
 # source venv/bin/activate   # macOS/Linux
 
 # Install dependencies
-
+pip install -r requirements.txt
 
 # Configure environment (see Environment Variables)
 # Run migrations
@@ -190,6 +190,22 @@ From the `backend/` directory, with the virtual environment activated and depend
 cd backend
 venv\Scripts\activate        # Windows
 # source venv/bin/activate     # macOS / Linux
+
+## Running All Services
+
+```bash
+# Terminal 1 – Backend (ASGI)
+cd backend && daphne auditra_backend.asgi:application
+
+# Terminal 2 – Celery worker
+cd backend && celery -A auditra_backend worker -l info --pool=solo
+
+# Terminal 3 – Celery Beat
+cd backend && celery -A auditra_backend beat -l info
+
+# Terminal 4 – Web App
+cd "auditra web app" && npm run dev
+```
 
 # Run all tests (discovers tests under each installed app’s tests/ package)
 python manage.py test
@@ -224,6 +240,8 @@ cd auditra
 flutter pub get
 flutter run
 ```
+
+
 
 ## Environment Variables
 
@@ -340,18 +358,4 @@ FCM_CREDENTIALS_PATH=/path/to/firebase-credentials.json
 
 All WebSocket connections authenticate via `?token=<jwt>` query parameter.
 
-## Running All Services
 
-```bash
-# Terminal 1 – Backend (ASGI)
-cd backend && daphne auditra_backend.asgi:application
-
-# Terminal 2 – Celery worker
-cd backend && celery -A auditra_backend worker -l info --pool=solo
-
-# Terminal 3 – Celery Beat
-cd backend && celery -A auditra_backend beat -l info
-
-# Terminal 4 – Web App
-cd "auditra web app" && npm run dev
-```

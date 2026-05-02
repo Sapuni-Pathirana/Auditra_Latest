@@ -2,10 +2,11 @@ import { useState, useRef, useCallback } from 'react';
 import axiosClient from '../../api/axiosClient';
 import { Link } from 'react-router-dom';
 import {
-  Box, TextField, Button, Typography, Alert, Grid, Container, Paper, Stack, Divider,
+  Box, TextField, Button, Typography, Alert, Grid, Container, Paper, Stack, Divider, Chip,
 } from '@mui/material';
 import { Upload, Send, ArrowBack } from '@mui/icons-material';
 import authService from '../../services/authService';
+import { validationRules, validateField, validateForm } from '../../utils/formValidation';
 
 /* ------------------------------------------------------------------ */
 /*  Section heading with blue underline                                */
@@ -44,39 +45,98 @@ export default function EmployeeFormPage() {
   const [cvFile, setCvFile] = useState(null);
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({}); // Field-level validation errors
   const emailDebounceRef = useRef(null);
-
-  const checkEmailOnBlur = useCallback((value, intent) => {
-    clearTimeout(emailDebounceRef.current);
-    emailDebounceRef.current = setTimeout(async () => {
-      if (!value || !value.includes('@')) return;
-      try {
-        const res = await axiosClient.get('/auth/public/check-email/', { params: { email: value, intent } });
-        if (res.data.conflict) {
-          setEmailError(`This email is already registered with a different role.`);
-        } else if (res.data.exists) {
-          setEmailError('This email is already registered.');
-        } else {
-          setEmailError('');
-        }
-      } catch {}
-    }, 400);
-  }, []);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const fileRef = useRef();
+  const [emailExists, setEmailExists] = useState(null); // null, true, or false
+
+  const checkEmailOnBlur = useCallback((value) => {
+    // First validate email format
+    const emailValidation = validationRules.email.validate(value);
+    if (!emailValidation.valid) {
+      setEmailError(emailValidation.error);
+      setEmailExists(null);
+      return;
+    }
+
+    // Then check for duplicates via server
+    clearTimeout(emailDebounceRef.current);
+    emailDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await axiosClient.get('/auth/public/check-email/', { params: { email: value, intent: 'general_employee' } });
+        if (res.data.conflict) {
+          setEmailError('This email is already registered with a different role.');
+          setEmailExists(true);
+        } else if (res.data.exists) {
+          setEmailError('This email is already registered.');
+          setEmailExists(true);
+        } else {
+          setEmailError('');
+          setEmailExists(false);
+        }
+      } catch {
+        setEmailExists(null);
+      }
+    }, 400);
+  }, []);
+
+  const validateFieldInput = (fieldName, value) => {
+    let result;
+    switch (fieldName) {
+      case 'first_name':
+        result = validationRules.name.validate(value, 'First Name');
+        break;
+      case 'last_name':
+        result = validationRules.name.validate(value, 'Last Name');
+        break;
+      case 'email':
+        result = validationRules.email.validate(value);
+        break;
+      case 'phone':
+        result = validationRules.phone.validate(value);
+        break;
+      case 'nic':
+        result = validationRules.nic.validate(value);
+        break;
+      case 'address':
+        result = validationRules.address.validate(value);
+        break;
+      case 'birthday':
+        result = validationRules.birthday.validate(value);
+        break;
+      default:
+        return;
+    }
+
+    if (result.valid) {
+      setFieldErrors((prev) => { const n = { ...prev }; delete n[fieldName]; return n; });
+    } else {
+      setFieldErrors((prev) => ({ ...prev, [fieldName]: result.error }));
+    }
+  };
 
   const handleChange = (e) => {
-    if (e.target.name === 'email' && emailError) setEmailError('');
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+    if (fieldErrors[name]) {
+      validateFieldInput(name, value);
+    }
+  };
+
+  const handleFieldBlur = (e) => {
+    const { name, value } = e.target;
+    validateFieldInput(name, value);
   };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      if (!allowed.includes(file.type)) {
-        setError('Only PDF, DOC, DOCX files are allowed');
+      // Validate file
+      const fileValidation = validationRules.cv_file.validate(file);
+      if (!fileValidation.valid) {
+        setError(fileValidation.error);
         setCvFile(null);
         return;
       }
@@ -91,6 +151,25 @@ export default function EmployeeFormPage() {
     setEmailError('');
     setSuccess('');
     setLoading(true);
+
+    // Validate all fields before submission
+    const validation = validateForm(form, {
+      first_name: { validate: (v) => validationRules.name.validate(v, 'First Name') },
+      last_name: { validate: (v) => validationRules.name.validate(v, 'Last Name') },
+      email: { validate: validationRules.email.validate },
+      birthday: { validate: validationRules.birthday.validate },
+      phone: { validate: validationRules.phone.validate },
+      address: { validate: validationRules.address.validate },
+      nic: { validate: validationRules.nic.validate },
+    });
+
+    if (!validation.isValid) {
+      setFieldErrors(validation.errors);
+      setError('Please fix the errors in the form before submitting.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const data = { ...form };
       if (cvFile) data.cv = cvFile;
@@ -98,6 +177,7 @@ export default function EmployeeFormPage() {
       setSuccess('Application submitted successfully! We will review and contact you.');
       setForm({ first_name: '', last_name: '', address: '', phone: '', birthday: '', nic: '', email: '' });
       setCvFile(null);
+      setFieldErrors({});
     } catch (err) {
       const data = err.response?.data;
       if (data?.field === 'email') {
@@ -209,22 +289,84 @@ export default function EmployeeFormPage() {
             <Box sx={{ p: { xs: 3, sm: 5 } }}>
               <SectionHeading>Personal Information</SectionHeading>
               <Grid container spacing={2.5}>
-                <Grid item xs={12} sm={6}><TextField fullWidth label="First Name" name="first_name" value={form.first_name} onChange={handleChange} required sx={inputSx} /></Grid>
-                <Grid item xs={12} sm={6}><TextField fullWidth label="Last Name" name="last_name" value={form.last_name} onChange={handleChange} required sx={inputSx} /></Grid>
-                <Grid item xs={12}><TextField fullWidth label="Address" name="address" value={form.address} onChange={handleChange} sx={inputSx} /></Grid>
-                <Grid item xs={12} sm={6}><TextField fullWidth label="Phone" name="phone" value={form.phone} onChange={handleChange} sx={inputSx} /></Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField fullWidth label="Birthday" name="birthday" type="date" value={form.birthday} onChange={handleChange} required
-                    InputLabelProps={{ shrink: true }} sx={inputSx} />
-                </Grid>
-                <Grid item xs={12} sm={6}><TextField fullWidth label="NIC" name="nic" value={form.nic} onChange={handleChange} sx={inputSx} /></Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    fullWidth label="Email" name="email" type="email" value={form.email}
-                    onChange={(e) => { handleChange(e); setEmailError(''); }}
-                    onBlur={(e) => checkEmailOnBlur(e.target.value, 'general_employee')}
-                    error={!!emailError} helperText={emailError} sx={inputSx}
+                    fullWidth label="First Name" name="first_name" value={form.first_name}
+                    onChange={handleChange} onBlur={handleFieldBlur} required sx={inputSx}
+                    error={!!fieldErrors.first_name} helperText={fieldErrors.first_name || ''}
                   />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth label="Last Name" name="last_name" value={form.last_name}
+                    onChange={handleChange} onBlur={handleFieldBlur} required sx={inputSx}
+                    error={!!fieldErrors.last_name} helperText={fieldErrors.last_name || ''}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth label="Address" name="address" value={form.address}
+                    onChange={handleChange} onBlur={handleFieldBlur} sx={inputSx}
+                    error={!!fieldErrors.address} helperText={fieldErrors.address || ''}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth label="Phone" name="phone" value={form.phone}
+                    onChange={handleChange} onBlur={handleFieldBlur} sx={inputSx}
+                    error={!!fieldErrors.phone} helperText={fieldErrors.phone || ''}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth label="Birthday" name="birthday" type="date" value={form.birthday}
+                    onChange={handleChange} onBlur={handleFieldBlur} required
+                    InputLabelProps={{ shrink: true }} sx={inputSx}
+                    error={!!fieldErrors.birthday} helperText={fieldErrors.birthday || ''}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth label="NIC" name="nic" value={form.nic}
+                    onChange={handleChange} onBlur={handleFieldBlur} sx={inputSx}
+                    error={!!fieldErrors.nic} helperText={fieldErrors.nic || ''}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Box>
+                    <TextField
+                      fullWidth label="Email" name="email" type="email" value={form.email}
+                      onChange={handleChange} onBlur={(e) => { handleFieldBlur(e); checkEmailOnBlur(e.target.value); }}
+                      error={!!emailError || !!fieldErrors.email} helperText={emailError || fieldErrors.email || ''} sx={inputSx}
+                      required
+                    />
+                    {emailExists === true && (
+                      <Chip
+                        label="Email already registered"
+                        size="small"
+                        sx={{
+                          mt: 1,
+                          bgcolor: '#FEF3C7',
+                          color: '#92400E',
+                          fontWeight: 500,
+                          fontSize: '0.75rem',
+                        }}
+                      />
+                    )}
+                    {emailExists === false && form.email && (
+                      <Chip
+                        label="Email available"
+                        size="small"
+                        sx={{
+                          mt: 1,
+                          bgcolor: '#DBEAFE',
+                          color: '#1E40AF',
+                          fontWeight: 500,
+                          fontSize: '0.75rem',
+                        }}
+                      />
+                    )}
+                  </Box>
                 </Grid>
               </Grid>
             </Box>
