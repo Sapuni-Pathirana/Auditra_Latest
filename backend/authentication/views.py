@@ -2378,7 +2378,7 @@ class AllEmployeeSubmissionsView(APIView):
 
         paginator = SubmissionPagination()
         page = paginator.paginate_queryset(queryset, request)
-        serializer = EmployeeFormSubmissionSerializer(page, many=True)
+        serializer = EmployeeFormSubmissionSerializer(page, many=True, context={'request': request})
         response = paginator.get_paginated_response(serializer.data)
         response.data['summary'] = summary
         return response
@@ -2393,7 +2393,7 @@ class EmployeeSubmissionDetailView(APIView):
             return Response({'error': 'Only admins can view submissions'}, status=status.HTTP_403_FORBIDDEN)
         try:
             submission = EmployeeFormSubmission.objects.get(pk=pk)
-            serializer = EmployeeFormSubmissionSerializer(submission)
+            serializer = EmployeeFormSubmissionSerializer(submission, context={'request': request})
             return Response(serializer.data)
         except EmployeeFormSubmission.DoesNotExist:
             return Response({'error': 'Submission not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -2443,7 +2443,7 @@ class EmployeeSubmissionDetailView(APIView):
                 action_url='/dashboard/employee-submissions',
             )
 
-            serializer = EmployeeFormSubmissionSerializer(submission)
+            serializer = EmployeeFormSubmissionSerializer(submission, context={'request': request})
             return Response({'success': True, 'data': serializer.data})
         except EmployeeFormSubmission.DoesNotExist:
             return Response({'error': 'Submission not found'}, status=status.HTTP_404_NOT_FOUND)

@@ -8,88 +8,9 @@ import {
 } from '@mui/icons-material';
 import axiosClient from '../../api/axiosClient';
 import { validationRules, validateForm } from '../../utils/formValidation';
+import SectionHeading from "../../components/SectionHeading";
+import TypeCard from '../../components/TypeCard';
 
-/* ------------------------------------------------------------------ */
-/*  Section heading with blue underline                                */
-/* ------------------------------------------------------------------ */
-const SectionHeading = ({ children }) => (
-  <Box sx={{ mb: 3 }}>
-    <Typography
-      variant="subtitle1"
-      sx={{
-        fontWeight: 700,
-        color: '#1565C0',
-        pb: 1,
-        position: 'relative',
-        display: 'inline-block',
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          width: 40,
-          height: 3,
-          bgcolor: '#1565C0',
-          borderRadius: 1,
-        },
-      }}
-    >
-      {children}
-    </Typography>
-  </Box>
-);
-
-/* ------------------------------------------------------------------ */
-/*  Registration type selection card                                    */
-/* ------------------------------------------------------------------ */
-const TypeCard = ({ icon: Icon, title, description, onClick }) => (
-  <Box
-    onClick={onClick}
-    sx={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 2,
-      p: { xs: 2, sm: 2.5 },
-      borderRadius: '8px',
-      border: '1px solid #E2E8F0',
-      borderLeft: '3px solid #1565C0',
-      bgcolor: '#fff',
-      cursor: 'pointer',
-      transition: 'all 0.2s',
-      '&:hover': {
-        bgcolor: '#F8FAFC',
-        borderColor: '#1565C0',
-        borderLeftColor: '#1565C0',
-        boxShadow: '0 2px 12px rgba(21,101,192,0.08)',
-        '& .type-arrow': { opacity: 1, transform: 'translateX(0)' },
-      },
-    }}
-  >
-    <Icon sx={{ fontSize: 22, color: '#1565C0', flexShrink: 0 }} />
-    <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Typography
-        variant="body1"
-        sx={{ fontWeight: 600, color: '#0F172A', fontSize: '0.9rem', lineHeight: 1.3 }}
-      >
-        {title}
-      </Typography>
-      <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.78rem', mt: 0.2 }}>
-        {description}
-      </Typography>
-    </Box>
-    <ArrowForward
-      className="type-arrow"
-      sx={{
-        fontSize: 18,
-        color: '#1565C0',
-        opacity: 0,
-        transform: 'translateX(-6px)',
-        transition: 'all 0.2s',
-        flexShrink: 0,
-      }}
-    />
-  </Box>
-);
 
 async function checkEmail(email, intent) {
   if (!email || !email.includes('@')) return null;
@@ -290,7 +211,7 @@ export default function ClientFormPage() {
             to="/"
             startIcon={<ArrowBack />}
             sx={{
-              color: 'rgba(255,255,255,0.8)',
+              color: 'rgba(255, 255, 255, 0.8)',
               textTransform: 'none',
               fontWeight: 500,
               fontSize: '0.85rem',
