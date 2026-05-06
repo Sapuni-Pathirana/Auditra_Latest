@@ -1,94 +1,16 @@
 import { useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Box, TextField, Button, Typography, Alert, Grid, Container, Paper, Divider,
+  Box, TextField, Button, Typography, Alert, Grid, Container, Paper, Divider, Chip,
 } from '@mui/material';
 import {
   Send, ArrowBack, ArrowForward, PersonOutline, Handshake,
 } from '@mui/icons-material';
 import axiosClient from '../../api/axiosClient';
+import { validationRules, validateForm } from '../../utils/formValidation';
+import SectionHeading from "../../components/SectionHeading";
+import TypeCard from '../../components/TypeCard';
 
-/* ------------------------------------------------------------------ */
-/*  Section heading with blue underline                                */
-/* ------------------------------------------------------------------ */
-const SectionHeading = ({ children }) => (
-  <Box sx={{ mb: 3 }}>
-    <Typography
-      variant="subtitle1"
-      sx={{
-        fontWeight: 700,
-        color: '#1565C0',
-        pb: 1,
-        position: 'relative',
-        display: 'inline-block',
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          width: 40,
-          height: 3,
-          bgcolor: '#1565C0',
-          borderRadius: 1,
-        },
-      }}
-    >
-      {children}
-    </Typography>
-  </Box>
-);
-
-/* ------------------------------------------------------------------ */
-/*  Registration type selection card                                    */
-/* ------------------------------------------------------------------ */
-const TypeCard = ({ icon: Icon, title, description, onClick }) => (
-  <Box
-    onClick={onClick}
-    sx={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 2,
-      p: { xs: 2, sm: 2.5 },
-      borderRadius: '8px',
-      border: '1px solid #E2E8F0',
-      borderLeft: '3px solid #1565C0',
-      bgcolor: '#fff',
-      cursor: 'pointer',
-      transition: 'all 0.2s',
-      '&:hover': {
-        bgcolor: '#F8FAFC',
-        borderColor: '#1565C0',
-        borderLeftColor: '#1565C0',
-        boxShadow: '0 2px 12px rgba(21,101,192,0.08)',
-        '& .type-arrow': { opacity: 1, transform: 'translateX(0)' },
-      },
-    }}
-  >
-    <Icon sx={{ fontSize: 22, color: '#1565C0', flexShrink: 0 }} />
-    <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Typography
-        variant="body1"
-        sx={{ fontWeight: 600, color: '#0F172A', fontSize: '0.9rem', lineHeight: 1.3 }}
-      >
-        {title}
-      </Typography>
-      <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.78rem', mt: 0.2 }}>
-        {description}
-      </Typography>
-    </Box>
-    <ArrowForward
-      className="type-arrow"
-      sx={{
-        fontSize: 18,
-        color: '#1565C0',
-        opacity: 0,
-        transform: 'translateX(-6px)',
-        transition: 'all 0.2s',
-        flexShrink: 0,
-      }}
-    />
-  </Box>
-);
 
 async function checkEmail(email, intent) {
   if (!email || !email.includes('@')) return null;
@@ -109,11 +31,82 @@ export default function ClientFormPage() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailErrors, setEmailErrors] = useState({});
+  const [fieldErrors, setFieldErrors] = useState({}); // Field-level validation errors
   const debounceRef = useRef({});
+  const [emailExistsStatus, setEmailExistsStatus] = useState({}); // Track existence status for each email field
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+    if (fieldErrors[name]) {
+      validateFieldInput(name, value, regType);
+    }
+  };
+
+  const handleFieldBlur = (e) => {
+    const { name, value } = e.target;
+    validateFieldInput(name, value, regType);
+  };
+
+  const validateFieldInput = (fieldName, value, currentRegType = regType) => {
+    let result;
+    switch (fieldName) {
+      case 'first_name':
+        result = validationRules.name.validate(value, 'First Name');
+        break;
+      case 'last_name':
+        result = validationRules.name.validate(value, 'Last Name');
+        break;
+      case 'email':
+        result = validationRules.email.validate(value);
+        break;
+      case 'phone':
+        result = validationRules.phone.validate(value);
+        break;
+      case 'nic':
+        result = validationRules.nic.validate(value);
+        break;
+      case 'address':
+        result = validationRules.address.validate(value);
+        break;
+      case 'company_name':
+        result = validationRules.company_name.validate(value);
+        break;
+      case 'project_title':
+        result = validationRules.project_title.validate(value);
+        break;
+      case 'project_description':
+        result = validationRules.project_description.validate(value);
+        break;
+      case 'agent_name':
+        result = validationRules.name.validate(value, 'Agent Name');
+        break;
+      case 'agent_phone':
+        result = validationRules.phone.validate(value);
+        break;
+      case 'agent_email':
+        result = validationRules.email.validate(value);
+        break;
+      default:
+        return;
+    }
+
+    if (result.valid) {
+      setFieldErrors((prev) => { const n = { ...prev }; delete n[fieldName]; return n; });
+    } else {
+      setFieldErrors((prev) => ({ ...prev, [fieldName]: result.error }));
+    }
+  };
 
   const validateEmailField = useCallback((fieldName, value, intent) => {
+    // First validate email format
+    const emailValidation = validationRules.email.validate(value);
+    if (!emailValidation.valid) {
+      setEmailErrors((prev) => ({ ...prev, [fieldName]: emailValidation.error }));
+      return;
+    }
+
+    // Then check for duplicates via server
     clearTimeout(debounceRef.current[fieldName]);
     debounceRef.current[fieldName] = setTimeout(async () => {
       const result = await checkEmail(value, intent);
@@ -133,6 +126,39 @@ export default function ClientFormPage() {
     setError('');
     setSuccess('');
     setLoading(true);
+
+    // Define field rules based on registration type
+    const baseRules = {
+      first_name: { validate: (v) => validationRules.name.validate(v, 'First Name') },
+      last_name: { validate: (v) => validationRules.name.validate(v, 'Last Name') },
+      email: { validate: validationRules.email.validate },
+      project_title: { validate: validationRules.project_title.validate },
+      project_description: { validate: validationRules.project_description.validate },
+      phone: { validate: validationRules.phone.validate },
+      address: { validate: validationRules.address.validate },
+      nic: { validate: validationRules.nic.validate },
+      company_name: { validate: validationRules.company_name.validate },
+    };
+
+    const agentRules = {
+      ...baseRules,
+      agent_name: { validate: (v) => validationRules.name.validate(v, 'Agent Name') },
+      agent_phone: { validate: validationRules.phone.validate },
+      agent_email: { validate: validationRules.email.validate },
+    };
+
+    const rules = regType === 'agent' ? agentRules : baseRules;
+
+    // Validate all fields
+    const validation = validateForm(form, rules);
+
+    if (!validation.isValid) {
+      setFieldErrors(validation.errors);
+      setError('Please fix the errors in the form before submitting.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const payload = { ...form };
       if (regType === 'direct') {
@@ -148,6 +174,8 @@ export default function ClientFormPage() {
         agent_name: '', agent_phone: '', agent_email: '',
       });
       setRegType(null);
+      setFieldErrors({});
+      setEmailErrors({});
     } catch (err) {
       const data = err.response?.data;
       if (data && typeof data === 'object') {
@@ -183,7 +211,7 @@ export default function ClientFormPage() {
             to="/"
             startIcon={<ArrowBack />}
             sx={{
-              color: 'rgba(255,255,255,0.8)',
+              color: 'rgba(255, 255, 255, 0.8)',
               textTransform: 'none',
               fontWeight: 500,
               fontSize: '0.85rem',
@@ -339,22 +367,86 @@ export default function ClientFormPage() {
               <Box sx={{ p: { xs: 3, sm: 5 } }}>
                 <SectionHeading>Personal Information</SectionHeading>
                 <Grid container spacing={2.5}>
-                  <Grid item xs={12} sm={6}><TextField fullWidth label="First Name" name="first_name" value={form.first_name} onChange={handleChange} sx={inputSx} /></Grid>
-                  <Grid item xs={12} sm={6}><TextField fullWidth label="Last Name" name="last_name" value={form.last_name} onChange={handleChange} sx={inputSx} /></Grid>
-                  <Grid item xs={12}><TextField fullWidth label="Address" name="address" value={form.address} onChange={handleChange} sx={inputSx} /></Grid>
-                  <Grid item xs={12} sm={6}><TextField fullWidth label="Phone" name="phone" value={form.phone} onChange={handleChange} sx={inputSx} /></Grid>
-                  <Grid item xs={12} sm={6}><TextField fullWidth label="NIC" name="nic" value={form.nic} onChange={handleChange} sx={inputSx} /></Grid>
-                  <Grid item xs={12}>
+                  <Grid item xs={12} sm={6}>
                     <TextField
-                      fullWidth label="Email" name="email" type="email" value={form.email}
-                      onChange={(e) => { handleChange(e); setEmailErrors((prev) => { const n = { ...prev }; delete n.email; return n; }); }}
-                      onBlur={(e) => validateEmailField('email', e.target.value, 'client')}
-                      required sx={inputSx}
-                      error={!!emailErrors.email}
-                      helperText={emailErrors.email || ''}
+                      fullWidth label="First Name" name="first_name" value={form.first_name}
+                      onChange={handleChange} onBlur={handleFieldBlur} required sx={inputSx}
+                      error={!!fieldErrors.first_name} helperText={fieldErrors.first_name || ''}
                     />
                   </Grid>
-                  <Grid item xs={12}><TextField fullWidth label="Company Name" name="company_name" value={form.company_name} onChange={handleChange} sx={inputSx} /></Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth label="Last Name" name="last_name" value={form.last_name}
+                      onChange={handleChange} onBlur={handleFieldBlur} required sx={inputSx}
+                      error={!!fieldErrors.last_name} helperText={fieldErrors.last_name || ''}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth label="Address" name="address" value={form.address}
+                      onChange={handleChange} onBlur={handleFieldBlur} sx={inputSx}
+                      error={!!fieldErrors.address} helperText={fieldErrors.address || ''}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth label="Phone" name="phone" value={form.phone}
+                      onChange={handleChange} onBlur={handleFieldBlur} sx={inputSx}
+                      error={!!fieldErrors.phone} helperText={fieldErrors.phone || ''}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth label="NIC" name="nic" value={form.nic}
+                      onChange={handleChange} onBlur={handleFieldBlur} sx={inputSx}
+                      error={!!fieldErrors.nic} helperText={fieldErrors.nic || ''}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Box>
+                      <TextField
+                        fullWidth label="Email" name="email" type="email" value={form.email}
+                        onChange={(e) => { handleChange(e); setEmailErrors((prev) => { const n = { ...prev }; delete n.email; return n; }); }}
+                        onBlur={(e) => { handleFieldBlur(e); validateEmailField('email', e.target.value, 'client'); }}
+                        required sx={inputSx}
+                        error={!!emailErrors.email || !!fieldErrors.email}
+                        helperText={emailErrors.email || fieldErrors.email || ''}
+                      />
+                      {emailExistsStatus.email === true && (
+                        <Chip
+                          label="Email already registered"
+                          size="small"
+                          sx={{
+                            mt: 1,
+                            bgcolor: '#FEF3C7',
+                            color: '#92400E',
+                            fontWeight: 500,
+                            fontSize: '0.75rem',
+                          }}
+                        />
+                      )}
+                      {emailExistsStatus.email === false && form.email && (
+                        <Chip
+                          label="Email available"
+                          size="small"
+                          sx={{
+                            mt: 1,
+                            bgcolor: '#DBEAFE',
+                            color: '#1E40AF',
+                            fontWeight: 500,
+                            fontSize: '0.75rem',
+                          }}
+                        />
+                      )}
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth label="Company Name" name="company_name" value={form.company_name}
+                      onChange={handleChange} onBlur={handleFieldBlur} sx={inputSx}
+                      error={!!fieldErrors.company_name} helperText={fieldErrors.company_name || ''}
+                    />
+                  </Grid>
                 </Grid>
               </Box>
 
@@ -364,8 +456,20 @@ export default function ClientFormPage() {
               <Box sx={{ p: { xs: 3, sm: 5 } }}>
                 <SectionHeading>Project Information</SectionHeading>
                 <Grid container spacing={2.5}>
-                  <Grid item xs={12}><TextField fullWidth label="Project Title" name="project_title" value={form.project_title} onChange={handleChange} required sx={inputSx} /></Grid>
-                  <Grid item xs={12}><TextField fullWidth label="Project Description" name="project_description" value={form.project_description} onChange={handleChange} required multiline rows={4} sx={inputSx} /></Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth label="Project Title" name="project_title" value={form.project_title}
+                      onChange={handleChange} onBlur={handleFieldBlur} required sx={inputSx}
+                      error={!!fieldErrors.project_title} helperText={fieldErrors.project_title || ''}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth label="Project Description" name="project_description" value={form.project_description}
+                      onChange={handleChange} onBlur={handleFieldBlur} required multiline rows={4} sx={inputSx}
+                      error={!!fieldErrors.project_description} helperText={fieldErrors.project_description || ''}
+                    />
+                  </Grid>
                 </Grid>
               </Box>
 
@@ -376,17 +480,57 @@ export default function ClientFormPage() {
                   <Box sx={{ p: { xs: 3, sm: 5 } }}>
                     <SectionHeading>Agent Information</SectionHeading>
                     <Grid container spacing={2.5}>
-                      <Grid item xs={12}><TextField fullWidth label="Agent Name" name="agent_name" value={form.agent_name} onChange={handleChange} required sx={inputSx} /></Grid>
-                      <Grid item xs={12} sm={6}><TextField fullWidth label="Agent Phone" name="agent_phone" value={form.agent_phone} onChange={handleChange} required sx={inputSx} /></Grid>
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth label="Agent Name" name="agent_name" value={form.agent_name}
+                          onChange={handleChange} onBlur={handleFieldBlur} required sx={inputSx}
+                          error={!!fieldErrors.agent_name} helperText={fieldErrors.agent_name || ''}
+                        />
+                      </Grid>
                       <Grid item xs={12} sm={6}>
                         <TextField
-                          fullWidth label="Agent Email" name="agent_email" type="email" value={form.agent_email}
-                          onChange={(e) => { handleChange(e); setEmailErrors((prev) => { const n = { ...prev }; delete n.agent_email; return n; }); }}
-                          onBlur={(e) => validateEmailField('agent_email', e.target.value, 'agent')}
-                          required sx={inputSx}
-                          error={!!emailErrors.agent_email}
-                          helperText={emailErrors.agent_email || ''}
+                          fullWidth label="Agent Phone" name="agent_phone" value={form.agent_phone}
+                          onChange={handleChange} onBlur={handleFieldBlur} required sx={inputSx}
+                          error={!!fieldErrors.agent_phone} helperText={fieldErrors.agent_phone || ''}
                         />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Box>
+                          <TextField
+                            fullWidth label="Agent Email" name="agent_email" type="email" value={form.agent_email}
+                            onChange={(e) => { handleChange(e); setEmailErrors((prev) => { const n = { ...prev }; delete n.agent_email; return n; }); }}
+                            onBlur={(e) => { handleFieldBlur(e); validateEmailField('agent_email', e.target.value, 'agent'); }}
+                            required sx={inputSx}
+                            error={!!emailErrors.agent_email || !!fieldErrors.agent_email}
+                            helperText={emailErrors.agent_email || fieldErrors.agent_email || ''}
+                          />
+                          {emailExistsStatus.agent_email === true && (
+                            <Chip
+                              label="Email already registered"
+                              size="small"
+                              sx={{
+                                mt: 1,
+                                bgcolor: '#FEF3C7',
+                                color: '#92400E',
+                                fontWeight: 500,
+                                fontSize: '0.75rem',
+                              }}
+                            />
+                          )}
+                          {emailExistsStatus.agent_email === false && form.agent_email && (
+                            <Chip
+                              label="Email available"
+                              size="small"
+                              sx={{
+                                mt: 1,
+                                bgcolor: '#DBEAFE',
+                                color: '#1E40AF',
+                                fontWeight: 500,
+                                fontSize: '0.75rem',
+                              }}
+                            />
+                          )}
+                        </Box>
                       </Grid>
                     </Grid>
                   </Box>

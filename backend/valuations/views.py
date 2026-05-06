@@ -165,6 +165,7 @@ class ValuationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@transaction.atomic
 def submit_valuation(request, pk):
     """Submit a valuation (change status from draft to submitted)"""
     valuation = get_object_or_404(
@@ -178,7 +179,7 @@ def submit_valuation(request, pk):
             {'error': 'Only draft or rejected valuations can be submitted.'},
             status=status.HTTP_400_BAD_REQUEST
         )
-    
+   
     is_resubmit = valuation.status == 'rejected'
     valuation.submit()
 
@@ -200,8 +201,8 @@ def submit_valuation(request, pk):
             ip_address=get_client_ip(request),
             metadata={'valuation_id': valuation.id, 'project_id': valuation.project.id},
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to log valuation submission for valuation {valuation.id}: {str(e)}")
 
     # Feature #3 (C1): notify the accessor / next reviewer.
     try:
@@ -221,8 +222,8 @@ def submit_valuation(request, pk):
                 action_url=f'/dashboard/projects/{project.id}',
                 email_subject=title,
             )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to send notification for valuation submission {valuation.id}: {str(e)}")
 
     serializer = ValuationSerializer(valuation, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)

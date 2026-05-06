@@ -430,8 +430,8 @@ export default function AccessorProjects() {
           />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setAcceptDialog({ ...acceptDialog, open: false })} sx={{ width: 110 }}>Cancel</Button>
-          <Button onClick={handleAcceptValuation} color="primary" variant="outlined" sx={{ width: 110 }}>Submit to Senior Valuer</Button>
+          <Button onClick={() => setAcceptDialog({ ...acceptDialog, open: false })} sx={{ width: 'fit' }}>Cancel</Button>
+          <Button onClick={handleAcceptValuation} color="primary" variant="outlined" sx={{ width: 'fit' }}>Submit to Senior Valuer</Button>
         </DialogActions>
       </Dialog>
 
