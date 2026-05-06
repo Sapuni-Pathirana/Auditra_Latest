@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../../models/project_model.dart';
 import '../../../../theme/app_colors.dart';
 import '../../../../widgets/shared_dashboard_widgets.dart';
-import '../../project_standups_screen.dart';
 import '../../visit_scheduling_screen.dart';
 import '../utils/field_officer_document_manager.dart';
 
@@ -271,33 +270,6 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => ProjectStandupsScreen(
-                              projectId: project.id,
-                              projectTitle: project.title,
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.chat_bubble_outline_rounded,
-                          color: AppColors.primary),
-                      label: const Text('Daily Standup'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF0D47A1),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Color(0xFF0D47A1)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-
                   // Documents Section
                   if (project.documents.isNotEmpty) ...[
                     const SizedBox(height: 24),

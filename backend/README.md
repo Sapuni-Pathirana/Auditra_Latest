@@ -45,6 +45,13 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+### One-command backend start (ASGI + Celery worker + Celery beat)
+From the backend folder, run:
+```powershell
+./start_backend.ps1
+```
+This script activates the local `venv` and starts all three processes in separate PowerShell windows.
+
 The API will be available at `http://localhost:8000/`
 
 ## API Endpoints

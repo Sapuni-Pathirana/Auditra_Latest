@@ -173,7 +173,7 @@ export default function AssignedSubmissions() {
     setPage(0);
   };
 
-  const handleTabChange = (_, newValue) => {
+  const handleTabChange = (newValue) => {
     setResponseFilter(newValue);
     setPage(0);
   };
@@ -237,9 +237,6 @@ export default function AssignedSubmissions() {
         onToggleExpand={handleToggleExpand}
         statusHeader="Response Status"
         projectBeforeCompany
-        getRowSx={(sub) => ({
-          bgcolor: (sub.coordinator_response || 'pending') === 'pending' ? 'warning.50' : 'inherit',
-        })}
         renderClientCell={(sub, fullName) => (
           <>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>{fullName}</Typography>
