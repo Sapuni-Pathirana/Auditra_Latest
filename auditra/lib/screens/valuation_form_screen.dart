@@ -1378,6 +1378,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                           'Description',
                           icon: Icons.description,
                           maxLines: 3,
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Description is required' : null,
                         ),
                         const SizedBox(height: 8),
                         Align(
@@ -1427,6 +1428,12 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                           'Base Value (LKR)',
                           icon: Icons.account_balance_wallet,
                           keyboardType: TextInputType.number,
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Base value is required';
+                            final n = double.tryParse(v.trim());
+                            if (n == null || n <= 0) return 'Enter a valid positive amount';
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 16),
                         // Price Calculation Section
@@ -1656,10 +1663,13 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     IconData? icon,
     int maxLines = 1,
     TextInputType? keyboardType,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       style: const TextStyle(fontSize: 16),
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      validator: validator,
       decoration: InputDecoration(
         labelText: label,
         hintText: 'Enter $label',
@@ -1756,6 +1766,12 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                         'Rate (%)',
                         icon: Icons.percent,
                         keyboardType: TextInputType.numberWithOptions(decimal: true),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Rate is required';
+                          final n = double.tryParse(v.trim());
+                          if (n == null || n <= 0 || n > 100) return 'Enter a rate between 0–100';
+                          return null;
+                        },
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1765,6 +1781,12 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                         'Number of Years',
                         icon: Icons.calendar_today,
                         keyboardType: TextInputType.number,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Years required';
+                          final n = int.tryParse(v.trim());
+                          if (n == null || n <= 0 || n > 100) return 'Enter 1–100 years';
+                          return null;
+                        },
                       ),
                     ),
                   ],
@@ -1978,12 +2000,19 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                 'Area (sq meters)',
                 icon: Icons.square_foot,
                 keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Area is required';
+                  final n = double.tryParse(v.trim());
+                  if (n == null || n <= 0) return 'Enter a valid positive area';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               _buildModernTextField(
                 _landTypeController,
                 'Land Type (e.g., Residential, Commercial)',
                 icon: Icons.category,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Land type is required' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -2034,12 +2063,19 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                 'Area (sq meters)',
                 icon: Icons.square_foot,
                 keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Area is required';
+                  final n = double.tryParse(v.trim());
+                  if (n == null || n <= 0) return 'Enter a valid positive area';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               _buildModernTextField(
                 _buildingTypeController,
                 'Building Type (e.g., House, Apartment)',
                 icon: Icons.home,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Building type is required' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -2078,6 +2114,12 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                 'Number of Floors',
                 icon: Icons.layers,
                 keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Number of floors is required';
+                  final n = int.tryParse(v.trim());
+                  if (n == null || n <= 0) return 'Enter a valid number of floors';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               _buildModernTextField(
@@ -2085,6 +2127,12 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                 'Year Built',
                 icon: Icons.calendar_today,
                 keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return null; // optional
+                  final n = int.tryParse(v.trim());
+                  if (n == null || n < 1800 || n > 2026) return 'Enter a valid year (1800–2026)';
+                  return null;
+                },
               ),
             ],
           ),
@@ -2105,17 +2153,45 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
           icon: Icons.directions_car,
           child: Column(
             children: [
-              _buildModernTextField(_vehicleMakeController, 'Make', icon: Icons.build),
+              _buildModernTextField(
+                _vehicleMakeController, 'Make', icon: Icons.build,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Make is required' : null,
+              ),
               const SizedBox(height: 16),
-              _buildModernTextField(_vehicleModelController, 'Model', icon: Icons.directions_car),
+              _buildModernTextField(
+                _vehicleModelController, 'Model', icon: Icons.directions_car,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Model is required' : null,
+              ),
               const SizedBox(height: 16),
-              _buildModernTextField(_vehicleYearController, 'Year', icon: Icons.calendar_today, keyboardType: TextInputType.number),
+              _buildModernTextField(
+                _vehicleYearController, 'Year', icon: Icons.calendar_today, keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Year is required';
+                  final n = int.tryParse(v.trim());
+                  if (n == null || n < 1886 || n > 2026) return 'Enter a valid year (1886–2026)';
+                  return null;
+                },
+              ),
               const SizedBox(height: 16),
-              _buildModernTextField(_vehicleRegistrationController, 'Registration Number', icon: Icons.confirmation_number),
+              _buildModernTextField(
+                _vehicleRegistrationController, 'Registration Number', icon: Icons.confirmation_number,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Registration number is required' : null,
+              ),
               const SizedBox(height: 16),
-              _buildModernTextField(_vehicleMileageController, 'Mileage', icon: Icons.speed, keyboardType: TextInputType.number),
+              _buildModernTextField(
+                _vehicleMileageController, 'Mileage', icon: Icons.speed, keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Mileage is required';
+                  final n = double.tryParse(v.trim());
+                  if (n == null || n < 0) return 'Enter a valid mileage';
+                  return null;
+                },
+              ),
               const SizedBox(height: 16),
-              _buildModernTextField(_vehicleConditionController, 'Condition (e.g., Excellent, Good, Fair)', icon: Icons.star),
+              _buildModernTextField(
+                _vehicleConditionController, 'Condition (e.g., Excellent, Good, Fair)', icon: Icons.star,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Condition is required' : null,
+              ),
             ],
           ),
         ),
@@ -2134,7 +2210,10 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
           icon: Icons.category,
           child: Column(
             children: [
-              _buildModernTextField(_otherTypeController, 'Type', icon: Icons.category),
+              _buildModernTextField(
+                _otherTypeController, 'Type', icon: Icons.category,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Type is required' : null,
+              ),
               const SizedBox(height: 16),
               _buildModernTextField(_otherSpecificationsController, 'Specifications', icon: Icons.description, maxLines: 3),
             ],
