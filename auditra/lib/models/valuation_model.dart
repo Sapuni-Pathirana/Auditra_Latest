@@ -50,6 +50,7 @@ class Valuation {
   final String? accessorComments;
   final String? seniorValuerComments;
   final String? finalReportUrl;
+  final String? submittedReportUrl; // URL of the PDF uploaded by the field officer on submission
 
   Valuation({
     required this.id,
@@ -94,6 +95,7 @@ class Valuation {
     this.accessorComments,
     this.seniorValuerComments,
     this.finalReportUrl,
+    this.submittedReportUrl,
   });
 
   factory Valuation.fromJson(Map<String, dynamic> json) {
@@ -191,6 +193,7 @@ class Valuation {
       accessorComments: json['accessor_comments'] as String?,
       seniorValuerComments: json['senior_valuer_comments'] as String?,
       finalReportUrl: json['final_report_url'] as String?,
+      submittedReportUrl: json['submitted_report_url'] as String?,
     );
   }
 

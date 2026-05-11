@@ -22,6 +22,8 @@ import 'field_officer/screens/valuation_reports_screen.dart'; // Added
 import 'visit_scheduling_screen.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sync_status_indicator.dart';
+import '../services/pdf_service.dart';
+import '../models/valuation_model.dart';
 
 class FieldOfficerDashboard extends StatefulWidget {
   const FieldOfficerDashboard({super.key});
@@ -331,6 +333,20 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
         int failedCount = 0;
         String? firstError;
         for (final valuation in valuationsToSubmit) {
+          // Generate and upload PDF before changing status
+          try {
+            final valResult = await ApiService.getValuation(valuation.id);
+            if (valResult['success'] == true && valResult['data'] != null) {
+              final freshValuation = Valuation.fromJson(valResult['data']);
+              final pdfFile = await PdfService.generateValuationReport(
+                valuation: freshValuation,
+                project: latestProject,
+              );
+              await ApiService.uploadSubmittedReport(valuation.id, pdfFile.path);
+            }
+          } catch (_) {
+            // PDF generation is best-effort; proceed with submission
+          }
           final submitRes = await ApiService.submitValuation(valuation.id);
           if (submitRes['success'] == true) {
             successCount++;

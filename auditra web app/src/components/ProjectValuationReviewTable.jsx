@@ -261,16 +261,15 @@ export default function ProjectValuationReviewTable({
                                     <Button
                                       size="small"
                                       startIcon={<PictureAsPdf />}
+                                      disabled={!v.submitted_report_url}
                                       onClick={() => {
                                         if (v.submitted_report_url) {
                                           window.open(v.submitted_report_url, '_blank');
-                                        } else {
-                                          viewValuationPDF(v, project.title);
                                         }
                                       }}
                                       sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}
                                     >
-                                      View PDF
+                                      {v.submitted_report_url ? 'View PDF' : 'PDF Not Available'}
                                     </Button>
                                     {renderValuationActions?.(v, project)}
                                     {renderValuationStatusChip?.(v)}

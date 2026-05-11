@@ -362,15 +362,14 @@ export default function AccessorProjects() {
               variant="outlined"
               color="secondary"
               startIcon={<PictureAsPdf />}
+              disabled={!valuationDetailDialog.valuation?.submitted_report_url}
               onClick={() => {
                 if (valuationDetailDialog.valuation?.submitted_report_url) {
                   window.open(valuationDetailDialog.valuation.submitted_report_url, '_blank');
-                } else {
-                  viewValuationPDF(valuationDetailDialog.valuation, valuationDetailDialog.projectTitle);
                 }
               }}
             >
-              View PDF Report
+              {valuationDetailDialog.valuation?.submitted_report_url ? 'View PDF Report' : 'PDF Not Available'}
             </Button>
           )}
           {valuationDetailDialog.valuation?.final_report_url && (

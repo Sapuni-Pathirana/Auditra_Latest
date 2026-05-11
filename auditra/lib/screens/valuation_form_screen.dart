@@ -16,9 +16,12 @@ import '../models/valuation_model.dart';
 import '../widgets/item_suggestions_widget.dart';
 import '../widgets/depreciation_widget.dart';
 
+/// Form screen for creating or editing a valuation report.
+/// Supports four asset categories: land, building, vehicle, and other.
+/// Handles photo capture, GPS location, price calculation, and online/offline submission.
 class ValuationFormScreen extends StatefulWidget {
   final Project project;
-  final Valuation? existingValuation;
+  final Valuation? existingValuation; // Null when creating a new valuation
 
   const ValuationFormScreen({
     super.key,
@@ -32,24 +35,24 @@ class ValuationFormScreen extends StatefulWidget {
 
 class _ValuationFormScreenState extends State<ValuationFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _picker = ImagePicker();
+  final _picker = ImagePicker(); // Used for gallery and camera image selection
   
-  String _category = 'land';
-  bool _isLoading = false;
-  bool _isSubmitting = false;
+  String _category = 'land'; // Currently selected asset category
+  bool _isLoading = false;   // True while GPS location is being fetched
+  bool _isSubmitting = false; // True while save/submit API call is in progress
   
-  // Common fields
+  // Common fields shared across all categories
   final _descriptionController = TextEditingController();
-  final _estimatedValueController = TextEditingController();
+  final _estimatedValueController = TextEditingController(); // The base/original asset value
   final _notesController = TextEditingController();
   
   // Appreciation/Depreciation calculation fields
-  String? _calculationType; // 'appreciation' or 'depreciation'
-  String? _calculationMethod; // selected method under type
+  String? _calculationType;   // 'appreciation' or 'depreciation'
+  String? _calculationMethod; // Selected calculation method under the chosen type
   final _rateController = TextEditingController();
   final _yearsController = TextEditingController();
-  final _newPriceController = TextEditingController();
-  bool _showNewPriceField = false; // Track if calculation has been done
+  final _newPriceController = TextEditingController(); // Result of price calculation
+  bool _showNewPriceField = false; // True once a calculation has been performed
   
   // Land fields
   final _landAreaController = TextEditingController();
@@ -79,17 +82,17 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
   final _otherTypeController = TextEditingController();
   final _otherSpecificationsController = TextEditingController();
   
-  List<File> _selectedPhotos = [];
-  // Feature #9: parallel metadata list — same index as _selectedPhotos
-  final List<Map<String, dynamic>> _photoMeta = [];
-  int _primaryPhotoIndex = 0;
-  List<ValuationPhoto> _existingPhotos = [];
-  int? _valuationId;
+  List<File> _selectedPhotos = []; // Newly selected local photos waiting to be uploaded
+  // Parallel metadata list — each entry corresponds to the same index in _selectedPhotos
+  final List<Map<String, dynamic>> _photoMeta = []; // GPS, timestamp, device_id per photo
+  int _primaryPhotoIndex = 0;       // Index of the photo marked as primary
+  List<ValuationPhoto> _existingPhotos = []; // Photos already uploaded to the server
+  int? _valuationId; // Non-null when editing an existing valuation
 
-  // Feature #10: item suggestion panel state
+  // Item suggestion panel state (Feature #10)
   bool _showSuggestions = false;
   String _lastSuggestionQuery = '';
-  // Feature #12: depreciation override state (set by DepreciationWidget)
+  // Depreciation result snapshot set by DepreciationWidget (Feature #12)
   Map<String, dynamic>? _depreciationResult;
 
   static const Map<String, String> _calculationMethodLabels = {
@@ -101,6 +104,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     'double_declining': 'Double Declining',
   };
 
+  /// Returns the list of available calculation methods for the currently selected
+  /// [_calculationType]. Appreciation and depreciation use different method sets.
   List<String> get _availableMethods {
     if (_calculationType == 'appreciation') {
       return const ['simple_interest', 'compound_annual', 'compound_monthly'];
@@ -115,9 +120,10 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
   void initState() {
     super.initState();
     if (widget.existingValuation != null) {
+      // Pre-populate all fields with data from the existing valuation
       _loadExistingValuation(widget.existingValuation!);
     } else {
-      // Automatically detect location for new valuations (land and building only)
+      // Automatically detect GPS location for new land/building valuations
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_category == 'land' || _category == 'building') {
           _getCurrentLocation();
@@ -126,13 +132,16 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     }
   }
 
+  /// Populates all form controllers and state variables from an [existingValuation].
+  /// Parses the embedded [VALUATION_CALCULATION] block from notes to restore
+  /// calculation type, method, rate, years, and calculated value.
   void _loadExistingValuation(Valuation valuation) {
     setState(() {
       _valuationId = valuation.id;
       _category = valuation.category;
       _descriptionController.text = valuation.description ?? '';
       
-      // Extract calculation information from notes if available
+      // Extract calculation information from notes if a structured block is present
       String? notes = valuation.notes;
       String? baseValueStr;
       String? adjustmentType;
@@ -290,6 +299,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     });
   }
 
+  /// Disposes all [TextEditingController]s to free resources when the widget
+  /// is removed from the tree.
   @override
   void dispose() {
     _descriptionController.dispose();
@@ -361,6 +372,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     return meta;
   }
 
+  /// Opens the device gallery, compresses the chosen image, captures metadata
+  /// (GPS, timestamp, device ID), and adds it to [_selectedPhotos].
   Future<void> _pickImage() async {
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
@@ -379,6 +392,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     }
   }
 
+  /// Opens the device camera, compresses the captured image, captures metadata
+  /// (GPS, timestamp, device ID), and adds it to [_selectedPhotos].
   Future<void> _takePhoto() async {
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.camera);
@@ -397,6 +412,9 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     }
   }
 
+  /// Requests device GPS and fills the location field for the active category.
+  /// Rounds coordinates to 6 decimal places to match the backend DecimalField precision.
+  /// Called automatically on screen load for land/building, and when category changes.
   Future<void> _getCurrentLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -473,6 +491,9 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     }
   }
 
+  /// Validates the form, builds the data payload (including calculation block
+  /// and depreciation snapshot), then creates or updates the valuation via the API.
+  /// After a successful save, uploads any newly selected photos with metadata.
   Future<void> _saveValuation() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -481,7 +502,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      // Helper function to clean empty strings to null
+      // Trims whitespace and converts empty strings to null for optional fields
       String? cleanString(String? value) {
         if (value == null || value.trim().isEmpty) return null;
         return value.trim();
@@ -507,7 +528,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         baseValue = double.tryParse(baseValueStr);
       }
 
-      // Use new price if calculated, otherwise use base value as estimated value
+      // If a price calculation was done, persist the calculated value as estimated_value;
+      // otherwise fall back to the raw base value entered by the user
       if (_showNewPriceField && _newPriceController.text.isNotEmpty) {
         final newPrice = double.tryParse(_newPriceController.text);
         if (newPrice != null) {
@@ -519,14 +541,15 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         data['estimated_value'] = baseValue;
       }
 
-      // Build notes with base value and calculation information
+      // Embed a structured [VALUATION_CALCULATION] block in notes so the
+      // calculation details can be restored when the valuation is loaded for editing
       String? notes = cleanString(_notesController.text);
       
-      // Always store base value information
+      // Always record at least the base value inside the calculation block
       if (baseValueStr != null) {
         String calculationInfo = '';
         
-        // If calculation was performed, include all calculation details
+        // Full calculation block when all inputs are available
         if (_showNewPriceField && _calculationType != null && _rateController.text.isNotEmpty && _yearsController.text.isNotEmpty && _newPriceController.text.isNotEmpty) {
           final methodLabel = _calculationMethodLabels[_calculationMethod] ??
               (_calculationType == 'appreciation'
@@ -654,6 +677,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
       // Debug: Print data being sent
       print('Sending valuation data: $data');
 
+      // Update existing valuation or create a new one depending on context
       Map<String, dynamic> result;
       if (_valuationId != null) {
         result = await ApiService.updateValuation(_valuationId!, data);
@@ -767,7 +791,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         
         print('Using valuation ID: $newValuationId');
         
-        // Upload photos with metadata (Feature #9)
+        // Upload each newly selected photo with its associated metadata
         for (var i = 0; i < _selectedPhotos.length; i++) {
           final photo = _selectedPhotos[i];
           final meta = i < _photoMeta.length ? _photoMeta[i] : <String, dynamic>{};
@@ -878,8 +902,10 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     }
   }
 
+  /// Confirms with the user, generates a PDF report, uploads it, then submits
+  /// the valuation to the accessor. Falls back to offline queuing if no network.
   Future<void> _submitValuation() async {
-    if (_valuationId == null) return;
+    if (_valuationId == null) return; // Guard: can only submit once saved
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -935,22 +961,33 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         }
       }
 
-      // Fetch the latest valuation data to generate the PDF
+      // Fetch fresh valuation data so the generated PDF includes all saved fields
       final valResult = await ApiService.getValuation(_valuationId!);
       if (valResult['success'] && valResult['data'] != null) {
         final valuation = Valuation.fromJson(valResult['data']);
 
-        // Generate the PDF report
+        // Generate the PDF report locally
         final pdfFile = await PdfService.generateValuationReport(
           valuation: valuation,
           project: widget.project,
         );
 
-        // Upload the PDF report to the server
-        await ApiService.uploadSubmittedReport(_valuationId!, pdfFile.path);
+        // Upload the generated PDF to the server before changing status
+        final uploadResult = await ApiService.uploadSubmittedReport(_valuationId!, pdfFile.path);
+        if (uploadResult['success'] != true) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to upload PDF report. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
       }
 
-      // Submit the valuation
+      // Change valuation status to 'submitted' on the server
       final result = await ApiService.submitValuation(_valuationId!);
       if (result['success']) {
         if (mounted) {
@@ -1017,6 +1054,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     }
   }
 
+  /// Shows a confirmation dialog, then deletes the given server-side [photo]
+  /// and removes it from [_existingPhotos] on success.
   Future<void> _deletePhoto(ValuationPhoto photo) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1060,7 +1099,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Check if project is assigned to current user
+    // Guard: show an error screen if the project hasn't been assigned yet
     if (!widget.project.isAssigned) {
       return Scaffold(
         appBar: AppBar(
@@ -1537,6 +1576,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
         );
   }
 
+  /// Legacy chip builder — replaced by [_buildModernCategoryChip].
   Widget _buildCategoryChip(String value, String label, IconData icon) {
     final isSelected = _category == value;
     return FilterChip(
@@ -1555,6 +1595,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Modern styled category selector chip. Selecting a land or building category
+  /// also triggers automatic GPS location detection.
   Widget _buildModernCategoryChip(String value, String label, IconData icon) {
     final isSelected = _category == value;
     return InkWell(
@@ -1607,6 +1649,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Wraps [child] in a styled card with a header showing [title] and [icon].
   Widget _buildSectionCard({required String title, required IconData icon, required Widget child}) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 360;
@@ -1641,6 +1684,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Builds a consistently styled [TextFormField] with an optional leading [icon].
   Widget _buildModernTextField(
     TextEditingController controller,
     String label, {
@@ -1667,6 +1711,9 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Renders the appreciation/depreciation calculation panel.
+  /// Allows choosing type and method, entering rate and years, and triggering
+  /// [_calculateNewPrice] to compute a new estimated value.
   Widget _buildPriceCalculationSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1782,12 +1829,15 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Toggle button for selecting appreciation vs depreciation.
+  /// Resets the method and clears previous input fields on selection.
   Widget _buildCalculationTypeButton(String value, String label, IconData icon, Color color) {
     final isSelected = _calculationType == value;
     return InkWell(
       onTap: () {
         setState(() {
           _calculationType = value;
+          // Set a sensible default method for the chosen type
           _calculationMethod =
               value == 'appreciation' ? 'compound_annual' : 'reducing_balance';
           // Clear previous calculation inputs
@@ -1833,8 +1883,11 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Computes a new asset price from the base value, rate, years, and selected
+  /// calculation method. Supports simple interest, compound (annual/monthly),
+  /// straight-line, reducing balance, and double-declining depreciation methods.
   void _calculateNewPrice() {
-    // Get current base value
+    // Validate base value
     final currentValue = double.tryParse(_estimatedValueController.text);
     if (currentValue == null || currentValue <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1932,6 +1985,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Simple bold section title used within category detail cards.
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
@@ -1944,8 +1998,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Builds the land-specific input fields: area, type, and auto-detected location.
   Widget _buildLandFields() {
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2000,8 +2054,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Builds the building-specific input fields: area, type, location, floors, and year built.
   Widget _buildBuildingFields() {
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2075,6 +2129,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Builds the vehicle-specific input fields: make, model, year, registration,
+  /// mileage, and condition.
   Widget _buildVehicleFields() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2103,6 +2159,7 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Builds the 'other' category fields: type and free-text specifications.
   Widget _buildOtherFields() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2123,10 +2180,13 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Renders a tappable card that opens the detected GPS coordinates in Google Maps.
+  /// Returns [SizedBox.shrink] when no coordinates are available for the current category.
   Widget _buildGoogleMapsLink() {
     double? lat;
     double? lng;
     
+    // Pick coordinates based on currently selected category
     if (_category == 'land' && _landLatitude != null && _landLongitude != null) {
       lat = _landLatitude;
       lng = _landLongitude;
@@ -2235,6 +2295,9 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Builds the photos section with gallery/camera buttons, a reorderable list
+  /// of new photos (with star-to-set-primary and delete actions), and thumbnails
+  /// for already-uploaded server photos.
   Widget _buildPhotosSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2431,6 +2494,8 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     );
   }
 
+  /// Renders a 100x100 thumbnail for an already-uploaded [photoUrl] or a local
+  /// [photoFile], with a delete button overlaid in the top-right corner.
   Widget _buildPhotoThumbnail({String? photoUrl, File? photoFile, required VoidCallback onDelete}) {
     return Stack(
       children: [

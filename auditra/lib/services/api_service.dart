@@ -23,8 +23,8 @@ class ApiService {
     String? lastName,
   }) async {
     try {
-      print('🔵 Registering user: $username');
-      print('🔵 API URL: $baseUrl/auth/register/');
+      print('Registering user: $username');
+      print('API URL: $baseUrl/auth/register/');
       
       final response = await http.post(
         Uri.parse('$baseUrl/auth/register/'),
@@ -44,8 +44,8 @@ class ApiService {
         },
       );
       
-      print('🔵 Response status: ${response.statusCode}');
-      print('🔵 Response body: ${response.body}');
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
 
       // Parse JSON response
       Map<String, dynamic> data;

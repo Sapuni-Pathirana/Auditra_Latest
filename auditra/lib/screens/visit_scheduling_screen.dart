@@ -5,14 +5,17 @@ import '../services/offline_db_service.dart';
 import '../services/offline_storage_service.dart';
 import '../theme/app_colors.dart';
 
+/// Screen for viewing and scheduling site visits for a given project.
+/// Supports offline caching — visits are shown from local cache when offline
+/// and refreshed from the API when a connection is available.
 class VisitSchedulingScreen extends StatefulWidget {
   final int projectId;
   final String projectTitle;
-  final String? appBarTitle;
-  final String? fabLabel;
-  final String? emptyStateText;
-  final String? confirmDialogTitle;
-  final String? confirmDialogScheduleLabel;
+  final String? appBarTitle;                  // Optional custom app bar title
+  final String? fabLabel;                     // Optional custom FAB label
+  final String? emptyStateText;               // Optional empty-state message
+  final String? confirmDialogTitle;           // Optional schedule confirmation dialog title
+  final String? confirmDialogScheduleLabel;   // Optional label for the confirm button
 
   const VisitSchedulingScreen({
     super.key,
@@ -30,17 +33,22 @@ class VisitSchedulingScreen extends StatefulWidget {
 }
 
 class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
-  List<Map<String, dynamic>> _visits = [];
-  bool _loading = true;
-  String? _error;
+  List<Map<String, dynamic>> _visits = []; // Current list of scheduled visits
+  bool _loading = true;   // True while the API call is in progress
+  String? _error;         // Holds an error message if loading fails
 
   @override
   void initState() {
     super.initState();
+    // Load from local cache immediately for a fast first paint,
+    // then fetch fresh data from the API in parallel
     _loadCachedVisitsOnStartup();
     _loadVisits();
   }
 
+  /// Initialises the offline database and immediately populates the UI with any
+  /// previously cached visits. This gives the user instant content before the
+  /// network response arrives.
   Future<void> _loadCachedVisitsOnStartup() async {
     try {
       await OfflineDBService.initOfflineDB();
@@ -53,24 +61,28 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
         });
       }
     } catch (_) {
-      // best effort only
+      // Best effort only — failures here are non-critical
     }
   }
 
+  /// Fetches the visit list from the API and updates the UI.
+  /// On success, also writes the result to the offline cache.
+  /// Falls back to the cached data if the API call fails or returns an error.
   Future<void> _loadVisits() async {
     setState(() { _loading = true; _error = null; });
     try {
       final res = await ApiService.getProjectVisits(widget.projectId);
       if (res['success'] == true) {
         final raw = res['data'];
-        final data = raw is List ? raw : <dynamic>[];
+        final data = raw is List ? raw : <dynamic>[];     // Guard against unexpected types
         final normalized = List<Map<String, dynamic>>.from(data);
-        OfflineStorageService.cacheProjectVisits(widget.projectId, normalized);
+        OfflineStorageService.cacheProjectVisits(widget.projectId, normalized); // Persist for offline use
         setState(() {
           _visits = normalized;
           _loading = false;
         });
       } else {
+        // API returned a failure — try to show cached data instead
         final cached = OfflineStorageService.getCachedProjectVisits(widget.projectId);
         if (cached != null && cached.isNotEmpty) {
           setState(() {
@@ -86,6 +98,7 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
         }
       }
     } catch (e) {
+      // Network or unexpected error — fall back to cache if available
       final cached = OfflineStorageService.getCachedProjectVisits(widget.projectId);
       if (cached != null && cached.isNotEmpty) {
         setState(() {
@@ -99,6 +112,8 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
     }
   }
 
+  /// Returns true if [message] indicates an offline/network connectivity problem
+  /// so the UI can show an appropriate offline icon and message.
   bool _isOfflineMessage(String? message) {
     if (message == null) return false;
     final m = message.toLowerCase();
@@ -108,7 +123,10 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
         m.contains('failed host lookup');
   }
 
+  /// Opens a date picker, then a confirmation dialog (with an optional notes field),
+  /// and posts the new visit to the API. Reloads the list on success.
   Future<void> _scheduleVisit() async {
+    // Prevent scheduling in the past; allow up to 1 year ahead
     final picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now().add(const Duration(days: 1)),
@@ -172,15 +190,19 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
     }
   }
 
+  /// Parses an ISO-8601 [rawDate] string and returns a human-friendly
+  /// formatted string (e.g. "Wed, May 7, 2026").
   String _formatVisitDate(String rawDate) {
     try {
       final parsed = DateTime.parse(rawDate);
       return DateFormat('EEE, MMM d, y').format(parsed);
     } catch (_) {
-      return rawDate;
+      return rawDate; // Return the raw string if parsing fails
     }
   }
 
+  /// Converts a snake_case [status] value (e.g. 'in_progress') into a
+  /// title-cased display string (e.g. 'In Progress').
   String _formatStatus(String status) {
     final normalized = status.trim().toLowerCase();
     if (normalized.isEmpty) return 'Scheduled';
@@ -190,6 +212,7 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
         .join(' ');
   }
 
+  /// Returns the background color for a visit status badge.
   Color _statusBgColor(String status) {
     switch (status.trim().toLowerCase()) {
       case 'completed':
@@ -201,6 +224,7 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
     }
   }
 
+  /// Returns the text/border color for a visit status badge.
   Color _statusTextColor(String status) {
     switch (status.trim().toLowerCase()) {
       case 'completed':
@@ -212,9 +236,11 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
     }
   }
 
+  /// Builds a card widget for a single [visit] entry showing its scheduled date,
+  /// optional notes, and a colour-coded status badge.
   Widget _buildVisitCard(Map<String, dynamic> visit) {
     final dateRaw = (visit['scheduled_date'] ?? '').toString();
-    final notes = (visit['notes'] ?? visit['note'] ?? '').toString().trim();
+    final notes = (visit['notes'] ?? visit['note'] ?? '').toString().trim(); // Support both key variants
     final statusRaw = (visit['status'] ?? 'scheduled').toString();
     final status = _formatStatus(statusRaw);
 
