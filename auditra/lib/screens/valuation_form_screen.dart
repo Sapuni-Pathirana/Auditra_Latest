@@ -14,7 +14,6 @@ import '../services/pdf_service.dart';
 import '../models/project_model.dart';
 import '../models/valuation_model.dart';
 import '../widgets/item_suggestions_widget.dart';
-import '../widgets/depreciation_widget.dart';
 
 /// Form screen for creating or editing a valuation report.
 /// Supports four asset categories: land, building, vehicle, and other.
@@ -92,8 +91,6 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
   // Item suggestion panel state (Feature #10)
   bool _showSuggestions = false;
   String _lastSuggestionQuery = '';
-  // Depreciation result snapshot set by DepreciationWidget (Feature #12)
-  Map<String, dynamic>? _depreciationResult;
 
   static const Map<String, String> _calculationMethodLabels = {
     'simple_interest': 'Simple Interest',
@@ -582,27 +579,6 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
           ).trim();
         }
         notes = notes != null && notes.isNotEmpty ? '$notes$calculationInfo' : calculationInfo;
-      }
-
-      // Feature #12: append computed depreciation snapshot to notes for audit
-      if (_depreciationResult != null) {
-        final d = _depreciationResult!;
-        final depBlock = '\n\n[DEPRECIATION]\n'
-            'Method: ${d['method'] ?? ''}\n'
-            'Book Value: ${d['computed_book_value'] ?? ''}\n'
-            'Depreciation Amount: ${d['depreciation_amount'] ?? ''}\n'
-            'Applied Rate: ${d['applied_rate'] ?? ''}\n'
-            'Override Reason: ${d['override_reason'] ?? ''}\n'
-            '[/DEPRECIATION]';
-        if (notes != null) {
-          notes = notes.replaceAll(
-            RegExp(r'\[DEPRECIATION\].*?\[/DEPRECIATION\]', dotAll: true, caseSensitive: false),
-            '',
-          ).trim();
-          notes = '$notes$depBlock';
-        } else {
-          notes = depBlock;
-        }
       }
 
       if (notes != null) data['notes'] = notes;
@@ -1476,17 +1452,6 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Feature #12: Depreciation calculator (not applicable for land)
-                  if (_category != 'land') ...[
-                    DepreciationWidget(
-                      category: _category,
-                      onResult: (result) {
-                        _depreciationResult = result;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
                   // Category-specific fields
                   if (_category == 'land') _buildLandFields(),
                   if (_category == 'building') _buildBuildingFields(),
