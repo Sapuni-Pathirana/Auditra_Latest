@@ -433,6 +433,7 @@ export default function ProjectDetail() {
   if (!project) return <Alert severity="error">Project not found</Alert>;
 
   const isCoordinator = role === 'coordinator';
+  const standupAllowed = ['admin', 'coordinator', 'field_officer', 'accessor', 'senior_valuer', 'md_gm'].includes(role);
   const isPending = project.status === 'pending';
   
   // Payment status
@@ -570,62 +571,74 @@ export default function ProjectDetail() {
                 <PriorityChip priority={project.priority} />
               </Box>
             </Box>
-            {isCoordinator && (
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {project.status !== 'cancelled' && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<Edit />}
-                    onClick={() => navigate(`/dashboard/projects/${id}/edit`)}
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Edit
-                  </Button>
-                )}
-                {isPending ? (
-                  <Tooltip title={!canStartProject ? 'Please complete all requirements before starting the project' : ''}>
-                    <span>
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<PlayArrow />}
-                        onClick={handleStartProject}
-                        disabled={starting || !canStartProject}
-                        sx={{ fontWeight: 600 }}
-                      >
-                        {starting ? 'Starting...' : 'Start Project'}
-                      </Button>
-                    </span>
-                  </Tooltip>
-                ) : (
-                  <FormControl size="small" sx={{ minWidth: 150 }}>
-                    <InputLabel>Update Status</InputLabel>
-                    <Select
-                      value={statusToUpdate}
-                      label="Update Status"
-                      onChange={(e) => handleUpdateStatus(e.target.value)}
-                      disabled={updatingStatus}
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+              {standupAllowed && (
+                <Button
+                  variant="outlined"
+                  startIcon={<EventNote />}
+                  onClick={() => navigate(`/dashboard/projects/${id}/standups`)}
+                  sx={{ fontWeight: 600 }}
+                >
+                  Standups
+                </Button>
+              )}
+              {isCoordinator && (
+                <>
+                  {project.status !== 'cancelled' && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<Edit />}
+                      onClick={() => navigate(`/dashboard/projects/${id}/edit`)}
+                      sx={{ fontWeight: 600 }}
                     >
-                      <MenuItem value="pending">Pending</MenuItem>
-                      <MenuItem value="in_progress">In Progress</MenuItem>
-                      <MenuItem value="completed">Completed</MenuItem>
-                    </Select>
-                  </FormControl>
-                )}
-                {/* Cancel Project Button */}
-                {project.status !== 'cancelled' && (!cancellationStatus?.has_request || cancellationStatus?.request?.status === 'rejected') && (
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    startIcon={<Block />}
-                    onClick={() => setCancelDialog(true)}
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Cancel Project
-                  </Button>
-                )}
-              </Box>
-            )}
+                      Edit
+                    </Button>
+                  )}
+                  {isPending ? (
+                    <Tooltip title={!canStartProject ? 'Please complete all requirements before starting the project' : ''}>
+                      <span>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          startIcon={<PlayArrow />}
+                          onClick={handleStartProject}
+                          disabled={starting || !canStartProject}
+                          sx={{ fontWeight: 600 }}
+                        >
+                          {starting ? 'Starting...' : 'Start Project'}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                      <InputLabel>Update Status</InputLabel>
+                      <Select
+                        value={statusToUpdate}
+                        label="Update Status"
+                        onChange={(e) => handleUpdateStatus(e.target.value)}
+                        disabled={updatingStatus}
+                      >
+                        <MenuItem value="pending">Pending</MenuItem>
+                        <MenuItem value="in_progress">In Progress</MenuItem>
+                        <MenuItem value="completed">Completed</MenuItem>
+                      </Select>
+                    </FormControl>
+                  )}
+                  {/* Cancel Project Button */}
+                  {project.status !== 'cancelled' && (!cancellationStatus?.has_request || cancellationStatus?.request?.status === 'rejected') && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<Block />}
+                      onClick={() => setCancelDialog(true)}
+                      sx={{ fontWeight: 600 }}
+                    >
+                      Cancel Project
+                    </Button>
+                  )}
+                </>
+              )}
+            </Box>
           </Box>
           
           {project.description && (

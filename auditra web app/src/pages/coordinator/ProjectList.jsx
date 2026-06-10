@@ -4,7 +4,7 @@ import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, Button, Alert, Chip,
 } from '@mui/material';
-import { Add, Visibility } from '@mui/icons-material';
+import { Add, Visibility, EventNote } from '@mui/icons-material';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusChip from '../../components/StatusChip';
 import PriorityChip from '../../components/PriorityChip';
@@ -141,6 +141,18 @@ export default function ProjectList() {
                     <TableCell sx={{ textAlign: 'center' }}>
                       <Button size="small" startIcon={<Visibility />} onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/projects/${p.id}`); }}>
                         View
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<EventNote />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/dashboard/projects/${p.id}/standups`);
+                        }}
+                        sx={{ ml: 1 }}
+                      >
+                        Standups
                       </Button>
                     </TableCell>
                   </TableRow>
