@@ -65,7 +65,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
             ),
             child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 12, width: 20),
           Text(
             label,
             style: TextStyle(

@@ -32,8 +32,18 @@ class ValuationFormScreen extends StatefulWidget {
   State<ValuationFormScreen> createState() => _ValuationFormScreenState();
 }
 
+/// Holds all the mutable state and logic for [ValuationFormScreen].
+///
+/// Responsibilities:
+///   - Managing all text input controllers (description, value, GPS, etc.)
+///   - Handling photo selection (gallery + camera) with GPS metadata stamping
+///   - Auto-detecting GPS location for land and building categories
+///   - Running appreciation / depreciation price calculations locally
+///   - Saving (creating or updating) the valuation via the API
+///   - Submitting the valuation to the accessor (generates PDF, uploads it, changes status)
+///   - Falling back to offline storage if there is no internet connection
 class _ValuationFormScreenState extends State<ValuationFormScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>(); // Global key used to validate all form fields at once
   final _picker = ImagePicker(); // Used for gallery and camera image selection
   
   String _category = 'land'; // Currently selected asset category
@@ -113,6 +123,15 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     return const [];
   }
 
+  /// Called once when the screen first opens.
+  ///
+  /// If the user is editing an existing valuation, pre-fills all form fields
+  /// by calling [_loadExistingValuation].
+  ///
+  /// If this is a brand-new valuation and the default category is land or building,
+  /// it automatically starts GPS detection after the first frame is rendered
+  /// (using [WidgetsBinding.instance.addPostFrameCallback] so the widget tree
+  /// is fully built before showing any location dialogs).
   @override
   void initState() {
     super.initState();
@@ -325,7 +344,11 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     super.dispose();
   }
 
-  /// Feature #9: compress image and return the compressed file.
+  /// Compresses an image file to reduce upload size.
+  ///
+  /// Target quality is 75%, minimum size 1280x720 px.
+  /// This keeps file sizes small without losing visible detail in the report.
+  /// Returns the compressed file, or the original if compression fails.
   Future<File?> _compressImage(File original) async {
     final targetPath = '${original.path}_compressed.jpg';
     final result = await FlutterImageCompress.compressAndGetFile(
@@ -338,7 +361,9 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     return result != null ? File(result.path) : original;
   }
 
-  /// Feature #9: get device identifier
+  /// Returns a unique identifier for this device (Android ID or iOS vendor ID).
+  /// This is embedded in each photo's metadata so auditors know which
+  /// device captured the evidence photo.
   Future<String> _getDeviceId() async {
     try {
       final info = DeviceInfoPlugin();
@@ -353,7 +378,16 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     return 'unknown';
   }
 
-  /// Feature #9: capture per-photo metadata (gps, timestamp, device_id).
+  /// Gathers metadata to attach to a photo at the moment it is captured.
+  ///
+  /// Records:
+  ///   - `captured_at` — ISO 8601 timestamp of when the photo was taken.
+  ///   - `device_id`   — Unique device identifier (see [_getDeviceId]).
+  ///   - `gps_lat` / `gps_lon` — GPS coordinates at capture time (best effort;
+  ///     silently skipped if location permission is denied or times out).
+  ///
+  /// This metadata is uploaded alongside the photo and stored in the database
+  /// so that report reviewers can verify where and when each photo was taken.
   Future<Map<String, dynamic>> _capturePhotoMeta() async {
     final meta = <String, dynamic>{
       'captured_at': DateTime.now().toIso8601String(),
@@ -488,12 +522,21 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     }
   }
 
-  /// Validates the form, builds the data payload (including calculation block
-  /// and depreciation snapshot), then creates or updates the valuation via the API.
-  /// After a successful save, uploads any newly selected photos with metadata.
+  /// Validates all form fields, builds the data payload, and saves the valuation.
+  ///
+  /// How it works:
+  ///   1. Runs form validation — stops immediately if any required field is empty/invalid.
+  ///   2. Builds a data map with all filled-in fields for the selected category.
+  ///   3. Embeds a `[VALUATION_CALCULATION]` block in the notes field so that
+  ///      appreciation/depreciation details survive round-trips to the server.
+  ///   4. Calls `ApiService.createValuation` (new) or `updateValuation` (edit).
+  ///   5. If the server is unreachable and offline mode is on, the data is stored
+  ///      locally and synced later — the form closes with an orange "saved offline" message.
+  ///   6. Uploads each newly selected photo with its GPS/timestamp metadata.
+  ///   7. Shows a green success snackbar and closes the screen.
   Future<void> _saveValuation() async {
     if (!_formKey.currentState!.validate()) {
-      return;
+      return; // Stop — one or more required fields have validation errors
     }
 
     setState(() => _isSubmitting = true);
@@ -878,8 +921,19 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     }
   }
 
-  /// Confirms with the user, generates a PDF report, uploads it, then submits
-  /// the valuation to the accessor. Falls back to offline queuing if no network.
+  /// Shows a confirm dialog, then submits the valuation to the accessor.
+  ///
+  /// Online path (normal):
+  ///   1. Fetches the latest saved valuation from the server.
+  ///   2. Generates a PDF report locally using [PdfService].
+  ///   3. Uploads the PDF to the server so the accessor can download it.
+  ///   4. Calls `ApiService.submitValuation` to change the status to "submitted".
+  ///
+  /// Offline path (no internet):
+  ///   - If offline mode is enabled and the device is offline,
+  ///     queues the submission in [OfflineStorageService] and closes the form.
+  ///     The sync engine will retry automatically when internet returns.
+  ///   - If a network error occurs mid-submission, the same offline queue is used.
   Future<void> _submitValuation() async {
     if (_valuationId == null) return; // Guard: can only submit once saved
 
@@ -1072,6 +1126,21 @@ class _ValuationFormScreenState extends State<ValuationFormScreen> {
     }
   }
 
+  /// Builds the main form screen layout.
+  ///
+  /// The screen contains:
+  ///   - A collapsible blue app bar showing the project name and form title
+  ///     ("New Valuation" or "Edit Valuation").
+  ///   - A project info card at the top.
+  ///   - An edit-window warning banner for submitted reports (editable 2 hrs only).
+  ///   - A category selector (Land / Building / Vehicle / Other).
+  ///   - A common info card (description, base value, calculation panel, notes).
+  ///   - Category-specific detail fields (land, building, vehicle, or other).
+  ///   - A GPS → Google Maps link card (land and building only).
+  ///   - A photos card (gallery + camera buttons + thumbnail list).
+  ///   - A "Save Report" button (always visible).
+  ///   - A "Submit to Accessor" button (only shown for draft/rejected reports
+  ///     that have already been saved once).
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

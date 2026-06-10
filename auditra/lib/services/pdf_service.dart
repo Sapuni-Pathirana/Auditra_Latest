@@ -10,8 +10,36 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../models/valuation_model.dart';
 import '../models/project_model.dart';
 
+/// Generates a professionally formatted A4 PDF report for a valuation.
+///
+/// The report follows a standard eight-section layout used by the company:
+///   I.   General Information    — client, project, dates, field officer name.
+///   II.  Asset Identification   — category, location, Google Maps link.
+///   III. Valuation Methodology  — explanation of the method used (auto-generated text).
+///   IV.  Asset Details          — tables with land/building/vehicle/other specifics.
+///   V.   Assumptions            — professional context and any adjustments applied.
+///   VI.  Supporting Documentation — evidence photos embedded as thumbnails.
+///   VII. Conclusion & Certification — final value statement and sign-off block.
+///   VIII. Distribution          — list of who receives the report.
+///
+/// Photos are downloaded from their server URLs before building the PDF so they
+/// are embedded directly in the document.
+/// The company logo is loaded from the app's asset bundle.
+/// The finished file is saved to the device's documents directory and the
+/// [File] path is returned so the caller can upload or share it.
 class PdfService {
-  /// Generate a PDF report for a valuation
+  /// Generates the full valuation report PDF and saves it to the device.
+  ///
+  /// Step-by-step process:
+  ///   1. Downloads all evidence photos from the server so they can be embedded.
+  ///   2. Loads the company logo from the app's asset bundle (falls back to text).
+  ///   3. Creates an A4 document with a 10 mm black border on every page and
+  ///      auto-numbered page footers.
+  ///   4. Adds a single multi-page section containing all eight report sections.
+  ///   5. Saves the PDF bytes to a uniquely-named file in the documents directory.
+  ///   6. Returns the [File] so the caller can upload it to the server.
+  ///
+  /// Throws on unrecoverable errors so the caller can show the user an error message.
   static Future<File> generateValuationReport({
     required Valuation valuation,
     required Project project,
@@ -230,7 +258,7 @@ class PdfService {
     }
   }
 
-  /// Build Header with Logo and Company Info
+  /// Builds the page header: company logo on the left, company contact info on the right.
   static pw.Widget _buildHeader(pw.Widget logoWidget) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -268,7 +296,9 @@ class PdfService {
     );
   }
 
-  /// Build Section I: General Information
+  /// Builds Section I: General Information table.
+  /// Shows the client name/email, field officer who prepared the report,
+  /// the project title, and the valuation date.
   static pw.Widget _buildSectionI(Project project, Valuation valuation, DateFormat dateFormat) {
     final valuationDate = valuation.submittedAt ?? valuation.createdAt;
     final preparedBy = valuation.fieldOfficerName ?? valuation.fieldOfficerUsername;
@@ -319,7 +349,9 @@ class PdfService {
     );
   }
 
-  /// Build Section II: Asset Identification
+  /// Builds Section II: Asset Identification table.
+  /// Shows the asset category, location (GPS for land/building, registration for
+  /// vehicles, type label for other), and a clickable Google Maps URL if available.
   static pw.Widget _buildSectionII(Valuation valuation) {
     // Determine location based on category
     final category = valuation.category.toLowerCase();
@@ -401,7 +433,9 @@ class PdfService {
     );
   }
 
-  /// Helper: Remove calculation block from notes for display
+  /// Strips the `[VALUATION_CALCULATION]...[/VALUATION_CALCULATION]` block from
+  /// the notes field before displaying it in the PDF. That block is only needed
+  /// by the app internally and would look confusing to the reader in a printed report.
   static String _cleanNotesForDisplay(String? notes) {
     if (notes == null || notes.isEmpty) return '';
     
@@ -414,7 +448,9 @@ class PdfService {
     return cleanedNotes;
   }
 
-  /// Build Section III: Valuation Methodology
+  /// Builds Section III: Valuation Methodology.
+  /// Displays auto-generated text that explains the valuation approach used,
+  /// based on the asset's category and any appreciation/depreciation method chosen.
   static pw.Widget _buildSectionIII(Valuation valuation, String? notes) {
     // Generate methodology text based on category and calculation method
     final methodologyText = _generateMethodologyText(valuation, notes);
@@ -442,7 +478,10 @@ class PdfService {
     );
   }
 
-  /// Generate methodology text based on asset category and calculation method
+  /// Generates the methodology paragraph text based on asset category and
+  /// any appreciation/depreciation adjustment stored in the valuation notes.
+  /// Reads the `[VALUATION_CALCULATION]` block from notes to determine if
+  /// an adjustment was applied and at what rate.
   static String _generateMethodologyText(Valuation valuation, String? notes) {
     // Parse calculation data from notes to determine if appreciation/depreciation was applied
     final calculationData = _parseCalculationDataFromNotes(notes);
@@ -569,7 +608,11 @@ class PdfService {
     return methodology;
   }
 
-  /// Parse calculation data from notes to extract base value, adjustment type, rate, and years
+  /// Reads the `[VALUATION_CALCULATION]...[/VALUATION_CALCULATION]` block
+  /// embedded inside the valuation notes field and returns a map with:
+  ///   `baseValue`, `adjustmentType` (appreciation/depreciation),
+  ///   `method`, `rate`, `years`, `newValue`.
+  /// Returns an empty map if no block is found.
   static Map<String, dynamic> _parseCalculationDataFromNotes(String? notes) {
     final result = <String, dynamic>{};
     
@@ -644,7 +687,10 @@ class PdfService {
     return result;
   }
 
-  /// Build Section IV: Asset Details
+  /// Builds Section IV: Asset Details tables.
+  /// For land and building: shows a tangible-assets table plus a valuation
+  /// adjustments table (if appreciation/depreciation was applied).
+  /// For vehicle and other: shows an intangible-assets table.
   static pw.Widget _buildSectionIV(Valuation valuation) {
     final currencyFormatter = NumberFormat.currency(symbol: 'LKR ', decimalDigits: 2);
     final isLandOrBuilding = valuation.category.toLowerCase() == 'land' || valuation.category.toLowerCase() == 'building';
@@ -714,7 +760,8 @@ class PdfService {
     );
   }
 
-  /// Build Tangible Assets Table
+  /// Builds the tangible assets table used for land and building categories.
+  /// Shows asset name, location, area, condition, base value, and current value.
   static pw.Widget _buildTangibleAssetsTable(Valuation valuation, NumberFormat currencyFormatter) {
     final estimatedValue = valuation.estimatedValue ?? 0.0;
     final category = valuation.category.toLowerCase();
@@ -800,7 +847,8 @@ class PdfService {
     );
   }
 
-  /// Build Intangible Assets Table
+  /// Builds the intangible / movable assets table used for vehicle and other categories.
+  /// Shows the asset type, description, and estimated value.
   static pw.Widget _buildIntangibleAssetsTable(Valuation valuation, NumberFormat currencyFormatter) {
     final estimatedValue = valuation.estimatedValue ?? 0.0;
     final category = valuation.category.toLowerCase();
@@ -883,7 +931,9 @@ class PdfService {
     );
   }
 
-  /// Build Valuation Adjustments Table (Appreciation/Depreciation)
+  /// Builds the appreciation / depreciation adjustment table that shows:
+  /// base value, adjustment type, method, rate, years, and resulting new value.
+  /// Only included when the field officer entered calculation data in the form.
   static pw.Widget _buildValuationAdjustmentsTable(Valuation valuation, NumberFormat currencyFormatter) {
     final estimatedValue = valuation.estimatedValue ?? 0.0;
     
@@ -1042,7 +1092,9 @@ class PdfService {
     );
   }
 
-  /// Build Section V: Valuation Assumptions and Adjustments
+  /// Builds Section V: Valuation Assumptions and Adjustments.
+  /// Contains auto-generated professional text describing the assumptions
+  /// behind the valuation, specific to each asset category.
   static pw.Widget _buildSectionV(Valuation valuation, String? notes) {
     // Generate assumptions and adjustments text based on category and calculation method
     final assumptionsText = _generateAssumptionsAndAdjustmentsText(valuation, notes);
@@ -1070,7 +1122,9 @@ class PdfService {
     );
   }
 
-  /// Generate assumptions and adjustments text based on asset category and calculation method
+  /// Generates the assumptions paragraph text for Section V.
+  /// Produces different text depending on the asset category and whether
+  /// an appreciation/depreciation calculation was applied.
   static String _generateAssumptionsAndAdjustmentsText(Valuation valuation, String? notes) {
     // Parse calculation data from notes to determine if appreciation/depreciation was applied
     final calculationData = _parseCalculationDataFromNotes(notes);
@@ -1207,7 +1261,9 @@ class PdfService {
     return assumptionsText;
   }
 
-  /// Build Section VI: Supporting Documentation
+  /// Builds Section VI: Supporting Documentation.
+  /// Embeds the evidence photos as a grid of 100×100 thumbnails and includes
+  /// a paragraph describing the types of documentation collected.
   static pw.Widget _buildSectionVI(Valuation valuation, String? notes, List<pw.Widget> photoWidgets) {
     // Generate supporting documentation text based on category and available evidence
     final supportingText = _generateSupportingDocumentationText(valuation, notes, photoWidgets.length);
@@ -1251,7 +1307,9 @@ class PdfService {
     );
   }
 
-  /// Generate supporting documentation text based on asset category and available evidence
+  /// Generates the supporting documentation paragraph for Section VI.
+  /// Describes what physical evidence was gathered for this specific asset
+  /// category and how many photos are included in the report.
   static String _generateSupportingDocumentationText(Valuation valuation, String? notes, int photoCount) {
     // Clean notes by removing calculation block
     final cleanedNotes = _cleanNotesForDisplay(notes);
@@ -1432,7 +1490,9 @@ class PdfService {
     return documentationText;
   }
 
-  /// Build Section VII: Conclusion and Certification
+  /// Builds Section VII: Conclusion and Certification.
+  /// States the final estimated value in LKR and provides a sign-off block
+  /// with the field officer's name, designation, and signature line.
   static pw.Widget _buildSectionVII(String? notes, Valuation valuation) {
     final currencyFormatter = NumberFormat.currency(symbol: 'LKR ', decimalDigits: 2);
     final dateFormat = DateFormat('MMMM dd, yyyy');
@@ -1480,7 +1540,9 @@ class PdfService {
     );
   }
 
-  /// Build Section VIII: Distribution
+  /// Builds Section VIII: Distribution List.
+  /// Lists the people who should receive a copy of this report
+  /// (client, project manager, accessor, company archive).
   static pw.Widget _buildSectionVIII(Project project) {
     // Build list of recipients
     final recipients = <String>[];
@@ -1539,7 +1601,7 @@ class PdfService {
     );
   }
 
-  /// Build Footer
+  /// Builds the page footer with company name, confidentiality notice, and page number.
   static pw.Widget _buildFooter() {
     return pw.Container(
       alignment: pw.Alignment.center,
@@ -1562,7 +1624,8 @@ class PdfService {
     );
   }
 
-  /// Helper: Build Info Table Row
+  /// Creates a single two-column row used inside the general-info table.
+  /// [label] is the left column (e.g. "Client Name:"), [value] is the right column.
   static pw.TableRow _buildInfoTableRow(String label, String value) {
     return pw.TableRow(
       children: [
@@ -1588,7 +1651,7 @@ class PdfService {
     );
   }
 
-  /// Helper: Build Table Cell
+  /// Creates a single PDF table cell with optional bold header styling.
   static pw.Widget _buildTableCell(String text, {bool isHeader = false}) {
     return pw.Container(
       padding: pw.EdgeInsets.all(8),
@@ -1605,7 +1668,8 @@ class PdfService {
     );
   }
 
-  /// Share/Print the PDF
+  /// Opens the device's share / print sheet so the user can send or print the PDF.
+  /// [subject] is used as the email subject line when sharing via email.
   static Future<void> sharePdf(File pdfFile, {String? subject}) async {
     final bytes = await pdfFile.readAsBytes();
     await Printing.layoutPdf(
@@ -1613,7 +1677,7 @@ class PdfService {
     );
   }
 
-  /// Save and open PDF
+  /// Opens the PDF file using the device's default PDF viewer app.
   static Future<void> saveAndOpenPdf(File pdfFile) async {
     await Printing.sharePdf(
       bytes: await pdfFile.readAsBytes(),

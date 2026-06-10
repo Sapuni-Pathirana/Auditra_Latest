@@ -25,6 +25,10 @@ import '../widgets/sync_status_indicator.dart';
 import '../services/pdf_service.dart';
 import '../models/valuation_model.dart';
 
+/// The main dashboard screen for field officers.
+/// It has two tabs: "Profile & Attendance" and "Projects".
+/// Field officers use this screen to check in, view their projects,
+/// create valuation reports, and submit them for review.
 class FieldOfficerDashboard extends StatefulWidget {
   const FieldOfficerDashboard({super.key});
 
@@ -33,31 +37,38 @@ class FieldOfficerDashboard extends StatefulWidget {
 }
 
 class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with TickerProviderStateMixin {
-  Attendance? _todayAttendance;
-  bool _isLoading = true;
-  bool _isWorkingDay = true;
-  String _selectedPeriod = 'daily';
-  AttendanceSummary? _summary;
+  // ─── State variables ─────────────────────────────────────────────────────
+
+  Attendance? _todayAttendance; // Today's attendance record (null = not yet checked in)
+  bool _isLoading = true;          // True while any data is being fetched
+  bool _isWorkingDay = true;        // False on Sundays and public holidays
+  String _selectedPeriod = 'daily'; // Period shown in the attendance summary
+  AttendanceSummary? _summary;      // Attendance stats for the selected period
   bool _isLoadingSummary = false;
-  bool _isMarkingAttendance = false;
-  String? _username;
-  String? _roleDisplay;
-  
+  bool _isMarkingAttendance = false; // True while the check-in API call is in progress
+  String? _username;                 // Logged-in user's username
+  String? _roleDisplay;              // Human-readable role (e.g. "Field Officer")
+
   // Project state
-  List<Project> _projects = [];
+  List<Project> _projects = [];     // All projects assigned to this field officer
   bool _isLoadingProjects = false;
-  late TabController _tabController;
-  
+  late TabController _tabController; // Controls switching between the two tabs
+
   // Timer for countdown
-  DateTime? _countdownEnd;
-  Duration _remainingTime = Duration.zero;
-  
+  DateTime? _countdownEnd;          // Fixed to 5:00 PM today
+  Duration _remainingTime = Duration.zero; // Time left until 5 PM
+
   // Leave statistics state
   Map<String, dynamic>? _leaveStatistics;
   bool _isLoadingLeaveStats = false;
-  StreamSubscription<bool>? _networkSubscription;
-  bool _wasOnline = true;
+  StreamSubscription<bool>? _networkSubscription; // Listens to internet connectivity changes
+  bool _wasOnline = true; // Tracks the previous connectivity state to detect transitions
 
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+
+  /// Called once when the screen first opens.
+  /// Sets up the tab bar, loads the user's info and projects,
+  /// and starts listening for network changes.
   @override
   void initState() {
     super.initState();
@@ -73,6 +84,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     _setupNetworkAutoRefresh();
   }
 
+  /// Called when the screen is removed from the widget tree.
+  /// Cancels the network listener and disposes the tab controller
+  /// to free up memory and avoid memory leaks.
   @override
   void dispose() {
     _networkSubscription?.cancel();
@@ -80,6 +94,12 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     super.dispose();
   }
 
+  // ─── Network ──────────────────────────────────────────────────────────────
+
+  /// Starts listening for internet connectivity changes.
+  /// When the device goes from offline back to online, this function
+  /// automatically refreshes the projects, attendance, and summary data
+  /// and shows a "Back online" message to the user.
   Future<void> _setupNetworkAutoRefresh() async {
     if (!NetworkService.isInitialized) {
       await NetworkService.init();
@@ -104,6 +124,10 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     });
   }
 
+  // ─── Data loading ─────────────────────────────────────────────────────────
+
+  /// Fetches the logged-in user's username and role from the API
+  /// and stores them in state so the welcome header can display them.
   Future<void> _loadUserInfo() async {
     final username = await ApiService.getUsername();
     final roleResult = await ApiService.getMyRole();
@@ -117,6 +141,10 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  // ─── Timer ────────────────────────────────────────────────────────────────
+
+  /// Initialises the end-of-day countdown target to 5:00 PM today
+  /// and immediately starts counting down.
   void _startTimer() {
     // Set countdown to 5 PM today
     final now = DateTime.now();
@@ -127,6 +155,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     _updateTimer();
   }
 
+  /// Updates [_remainingTime] every second so the countdown display refreshes.
+  /// When the timer reaches zero (5 PM), it automatically calls [_checkOut]
+  /// if the field officer is still checked in.
   void _updateTimer() {
     if (_countdownEnd != null) {
       final now = DateTime.now();
@@ -153,6 +184,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Fetches today's attendance record from the server.
+  /// Updates [_todayAttendance] with check-in time, check-out time,
+  /// working hours, and whether today is a working day.
   Future<void> _loadTodayAttendance() async {
     setState(() => _isLoading = true);
     final result = await ApiService.getTodayAttendance();
@@ -173,6 +207,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Fetches attendance summary statistics (present days, absent days,
+  /// total working hours, etc.) for the selected time period
+  /// (daily / weekly / monthly / yearly).
   Future<void> _loadSummary() async {
     setState(() => _isLoadingSummary = true);
     final result = await ApiService.getAttendanceSummary(period: _selectedPeriod);
@@ -187,6 +224,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Fetches the list of projects assigned to this field officer from the server.
+  /// If the server is unreachable, it falls back to the locally cached project list
+  /// so the app still works offline.
   Future<void> _loadProjects() async {
     setState(() {
       _isLoading = true;
@@ -245,6 +285,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Loads projects from the local offline cache immediately when the screen opens.
+  /// This makes the project list appear instantly, even before the server responds.
+  /// The live data will replace it once [_loadProjects] finishes.
   Future<void> _loadCachedProjectsOnStartup() async {
     try {
       await OfflineDBService.initOfflineDB();
@@ -260,6 +303,11 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  // ─── Navigation helpers ──────────────────────────────────────────────────
+
+  /// Opens the Valuation Reports screen, which lists all valuation reports
+  /// for the given [project]. Passes a callback so the project list
+  /// refreshes when the user comes back.
   void _viewValuationReports(Project project) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -271,6 +319,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Opens the Valuation Form screen to create a brand-new valuation report
+  /// for the given [project]. Reloads the project list on return.
   void _createReport(Project project) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -279,6 +329,16 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     ).then((_) => _loadProjects());
   }
 
+  /// Asks the user to confirm, then submits all draft/rejected valuation reports
+  /// for the given [project] to the accessor for review.
+  ///
+  /// For each report it:
+  ///   1. Fetches the latest data from the server.
+  ///   2. Generates a PDF report locally.
+  ///   3. Uploads the PDF to the server.
+  ///   4. Changes the report status to "submitted".
+  ///
+  /// Shows a success or error message when done.
   Future<void> _submitToAccessor(Project project) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -398,6 +458,11 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  // ─── Attendance actions ───────────────────────────────────────────────────
+
+  /// Sends a check-in request to the server to mark attendance for today.
+  /// Updates the local attendance record and starts the end-of-day countdown timer.
+  /// Shows a success or error message depending on the API response.
   Future<void> _markAttendance() async {
     setState(() => _isMarkingAttendance = true);
     
@@ -473,6 +538,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Asks the user to confirm, then sends an early-leave request to the server.
+  /// The backend records whether this counts as a full day or a half day
+  /// based on how many hours were worked.
   Future<void> _leaveEarly() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -520,6 +588,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Sends a check-out request to the server at the end of the working day.
+  /// This is also called automatically when the 5 PM countdown reaches zero.
   Future<void> _checkOut() async {
     final result = await ApiService.checkOut();
     
@@ -537,6 +607,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Sends a request to the server to begin recording overtime hours.
+  /// Only available after the field officer has already checked out for the day.
   Future<void> _startOvertime() async {
     final result = await ApiService.startOvertime();
     
@@ -554,6 +626,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Sends a request to the server to stop recording overtime.
+  /// The server returns the total overtime hours worked, which is shown
+  /// in a snack bar and reflected in the attendance summary.
   Future<void> _endOvertime() async {
     final result = await ApiService.endOvertime();
     
@@ -575,6 +650,10 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  // ─── Auth ─────────────────────────────────────────────────────────────────
+
+  /// Shows a styled confirmation dialog, then logs the user out.
+  /// Clears the session token via the API and navigates back to the Login screen.
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -721,6 +800,10 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  /// Converts a [Duration] into a readable HH:MM:SS string.
+  /// For example, 1 hour and 5 minutes becomes "01:05:00".
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     final hours = twoDigits(duration.inHours);
@@ -729,6 +812,11 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     return '$hours:$minutes:$seconds';
   }
 
+  // ─── UI ───────────────────────────────────────────────────────────────────
+
+  /// Builds the main screen layout.
+  /// Uses a [NestedScrollView] with a collapsible app bar that contains
+  /// the welcome header and a two-tab bar (Profile & Attendance / Projects).
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -834,6 +922,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Builds the "Profile & Attendance" tab.
+  /// Shows today's attendance card, the attendance summary, and quick-action links
+  /// (Change Password, Payment Slips).
   Widget _buildProfileTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -898,6 +989,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
   
+  /// Builds a single tappable row in the Quick Actions section.
+  /// Shows a coloured icon on the left, a title in the middle, and an arrow on the right.
   Widget _buildQuickActionTile({
     required IconData icon,
     required Color color,
@@ -923,6 +1016,10 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Builds the "Projects" tab.
+  /// Shows a pull-to-refresh scrollable list of project cards.
+  /// Each card has buttons to view reports, create reports, submit, and schedule visits.
+  /// Displays a friendly empty state if no projects are assigned yet.
   Widget _buildProjectsTab() {
     return RefreshIndicator(
       onRefresh: _loadProjects,
@@ -948,6 +1045,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
   
+  /// Builds the empty state shown in the Projects tab when no projects
+  /// have been assigned to the field officer yet.
   Widget _buildEmptyProjectsState() {
     return Center(
       child: Column(
@@ -974,6 +1073,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Navigates to the Project Details screen which shows full information
+  /// about the selected [project] (description, visits, maps, etc.).
   Future<void> _viewProjectDetails(Project project) async {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -982,6 +1083,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Opens the Visit Scheduling screen so the field officer can set or update
+  /// the date they plan to visit the site for the given [project].
   void _openValuationSchedule(Project project) {
     Navigator.of(context)
         .push<void>(
@@ -1003,10 +1106,16 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     });
   }
   
+  // ─── Display helpers ─────────────────────────────────────────────────────
+
+  /// Returns the colour associated with a project's priority level
+  /// (red for high, blue for medium, green for low).
   Color _getPriorityColor(String priority) {
     return AppColors.priorityColor(priority);
   }
   
+  /// Converts a raw priority string to an uppercase display label.
+  /// Defaults to "MEDIUM" if the value is empty or unrecognised.
   String _formatPriorityLabel(String priority) {
     if (priority.isEmpty) return 'MEDIUM';
     final lower = priority.toLowerCase();
@@ -1015,6 +1124,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     return 'MEDIUM';
   }
   
+  /// Builds a small coloured badge (HIGH / MEDIUM / LOW) with an icon
+  /// that is displayed on each project card.
   Widget _buildPriorityRibbon(String priority) {
     final color = _getPriorityColor(priority);
     final label = _formatPriorityLabel(priority);
@@ -1060,6 +1171,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Returns a light background colour for a project status chip
+  /// (orange for pending, blue for in-progress, green for completed, etc.).
   Color _getProjectStatusColor(String status) {
     switch (status) {
       case 'pending':
@@ -1075,6 +1188,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Returns the text/icon colour for a valuation report's status
+  /// (grey for draft, blue for submitted, green for approved, red for rejected, etc.).
   Color _getValuationStatusColor(String status) {
     switch (status) {
       case 'draft':
@@ -1094,6 +1209,15 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
 
 
 
+  // ─── Attendance widgets ──────────────────────────────────────────────────
+
+  /// Builds the "Today's Attendance" card at the top of the Profile tab.
+  ///
+  /// The card content changes based on the current state:
+  ///   - Not a working day → shows an info message.
+  ///   - Not yet checked in → shows the countdown timer + "Mark Attendance" button.
+  ///   - Checked in but not out → shows the countdown timer + "Leave Early" button.
+  ///   - Checked out → shows check-in/out times, working hours, and overtime controls.
   Widget _buildTodayAttendanceCard() {
     return Card(
       elevation: 4,
@@ -1338,6 +1462,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Builds the "Attendance Summary" card which shows stats like present days,
+  /// absent days, working hours, and overtime for the selected period.
+  /// The user can switch between Daily, Weekly, Monthly, and Yearly views.
   Widget _buildSummarySection() {
     return Card(
       elevation: 2,
@@ -1449,6 +1576,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Builds a single coloured stat tile used inside the attendance summary.
+  /// Shows a [value] (e.g. "15") above a [title] label (e.g. "Present").
   Widget _buildSummaryCard(String title, String value, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1483,6 +1612,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
 
 
 
+  /// Returns the background colour for the attendance status chip
+  /// (green = present, orange = half day, red = absent).
   Color _getStatusColor(String status) {
     switch (status) {
       case 'present':
@@ -1496,6 +1627,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     }
   }
 
+  /// Builds the animated countdown timer widget that shows how much time
+  /// is left until 5 PM.
+  /// The colour changes from blue → orange (< 1 hour left) → red (past 5 PM).
   Widget _buildAnimatedCountdown() {
     final now = DateTime.now();
     final isAfter5PM = now.isAfter(_countdownEnd ?? now);
@@ -1596,6 +1730,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Builds the green "Mark Attendance" button shown when the field officer
+  /// has not yet checked in today. Shows a spinner while the API call is in progress.
   Widget _buildAttendanceButton() {
     return Container(
       height: 100,
@@ -1688,6 +1824,8 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Builds the orange "Leave Early" button shown when the field officer
+  /// is checked in but wants to leave before 5 PM.
   Widget _buildLeaveEarlyButton() {
     return Container(
       height: 100,
@@ -1756,6 +1894,9 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
     );
   }
 
+  /// Builds the animated orange "Start Overtime" button shown after the
+  /// field officer has checked out and it is past 5 PM.
+  /// Uses a scale entrance animation and a continuous pulsing background effect.
   Widget _buildStartOvertimeButton() {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -1860,7 +2001,13 @@ class _FieldOfficerDashboardState extends State<FieldOfficerDashboard> with Tick
   }
 }
 
-// Animated Widgets
+// ─────────────────────────────────────────────────────────────────────────────
+// Animated helper widgets used inside the dashboard.
+// These are private (prefixed with _) because they are only needed here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A container that slowly pulses brighter and dimmer using a radial gradient.
+/// Used as a background effect on the countdown timer and the overtime button.
 class _PulsingContainer extends StatefulWidget {
   final Color color;
 
@@ -1870,6 +2017,8 @@ class _PulsingContainer extends StatefulWidget {
   State<_PulsingContainer> createState() => _PulsingContainerState();
 }
 
+/// A full-size background layer that pulses to give buttons a glowing effect.
+/// Used inside the "Start Overtime" button.
 class _PulsingButtonBackground extends StatefulWidget {
   final Color color;
 
@@ -1959,6 +2108,8 @@ class _PulsingContainerState extends State<_PulsingContainer>
   }
 }
 
+/// An icon that continuously rotates 360° in a loop.
+/// Used as the timer icon inside the countdown widget.
 class _RotatingIcon extends StatefulWidget {
   final IconData icon;
   final Color color;

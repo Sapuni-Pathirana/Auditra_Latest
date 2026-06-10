@@ -11,8 +11,8 @@ import '../../../../theme/app_colors.dart';
 import 'package:open_file/open_file.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Screen that lists all valuation reports for a given project.
-/// Field officers can view, create, edit, submit, and delete reports here.
+/// Screen that lists all valuation reports for a given project
+/// Field officers can view, create, edit, submit, and delete reports here
 class ValuationReportsScreen extends StatefulWidget {
   final Project project;
   final VoidCallback? onProjectUpdated; // Optional callback to notify parent when project data changes
@@ -27,11 +27,17 @@ class ValuationReportsScreen extends StatefulWidget {
   State<ValuationReportsScreen> createState() => _ValuationReportsScreenState();
 }
 
+/// Holds all the mutable state and logic for [ValuationReportsScreen].
+/// This is the "brain" behind the screen — it loads data, handles user actions,
+/// and tells Flutter when to redraw the UI.
 class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
   late FieldOfficerDocumentManager _documentManager; // Handles document-related operations
   Project? _currentProject; // Holds the latest project data after refreshes
   bool _isLoading = false; // Controls loading indicator visibility
 
+  /// Called once when the screen first opens.
+  /// Stores the project passed from the parent and sets up the document manager
+  /// that is used for PDF generation and file operations.
   @override
   void initState() {
     super.initState();
@@ -43,23 +49,25 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
     );
   }
 
-  /// Fetches the latest project data from the API and updates the UI.
-  /// Also notifies the parent widget via [onProjectUpdated] callback.
+  /// Fetches the latest project data from the API and updates the UI
+  /// Also notifies the parent widget via [onProjectUpdated] callback
   Future<void> _refreshProject() async {
-    setState(() => _isLoading = true);
+    setState(() => _isLoading = true); // Show spinner while loading
     try {
-      final result = await ApiService.getProject(widget.project.id);
+      final result = await ApiService.getProject(widget.project.id); // Call the backend
       if (result['success']) {
         setState(() {
+          // Replace old project data with the fresh copy from the server
           _currentProject = Project.fromJson(result['data']);
         });
+        // Tell the parent screen (e.g. dashboard) to also refresh its project list
         widget.onProjectUpdated?.call();
       }
     } catch (e) {
-      print('Error refreshing project: $e');
+      print('Error refreshing project: $e'); // Log silently; don't crash the screen
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isLoading = false); // Hide spinner regardless of success or failure
       }
     }
   }
@@ -78,11 +86,11 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(false), // User chose Cancel
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(context).pop(true), // User chose Delete
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
           ),
@@ -90,12 +98,12 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
       ),
     );
 
-    if (confirm != true) return; // User cancelled
+    if (confirm != true) return; // User cancelled — do nothing
 
-    setState(() => _isLoading = true);
+    setState(() => _isLoading = true); // Show spinner while the API call runs
 
     try {
-      final result = await ApiService.deleteValuation(valuation.id);
+      final result = await ApiService.deleteValuation(valuation.id); // Send delete request
 
       if (result['success']) {
         if (mounted) {
@@ -108,6 +116,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
           _refreshProject(); // Reload list after deletion
         }
       } else {
+        // Server returned an error message
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -118,6 +127,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
         }
       }
     } catch (e) {
+      // Unexpected network/parse error
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -128,11 +138,20 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isLoading = false); // Always hide spinner when done
       }
     }
   }
 
+  /// Builds the entire screen layout
+  ///
+  /// The screen has a collapsible blue app bar showing the project name,
+  /// a scrollable body with the list of valuation report cards,
+  /// and a floating "+New Report" button (only visible when the project
+  /// status is "in_progress")
+  ///
+  /// Shows a loading spinner while data is being fetched,
+  /// and an empty-state message if no reports exist yet
   @override
   Widget build(BuildContext context) {
     // Use refreshed project data if available, otherwise fall back to the initial data
@@ -259,7 +278,8 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                     },
                   ),
       ),
-      // FAB only shown when the project is actively in progress
+      // FloatingActionButton only shown when the project is actively in progress
+      // (a completed or pending project should not allow new reports)
       floatingActionButton: project.status == 'in_progress'
           ? FloatingActionButton.extended(
               onPressed: () async {
@@ -270,6 +290,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                   ),
                 );
                 // Refresh the list if a new report was successfully created
+                // (the form screen returns `true` on success)
                 if (result == true) {
                   _refreshProject();
                 }
@@ -283,12 +304,24 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
   }
 
   /// Builds a card widget for a single [valuation] report.
-  /// Displays category, status, estimated value, date, description,
-  /// and action buttons (PDF, edit, submit, delete) based on the valuation's state.
+  ///
+  /// Each card has three sections:
+  ///   1. **Header** - category icon, name, and a colour-coded status badge
+  ///      (DRAFT / SUBMITTED / APPROVED / REJECTED).
+  ///   2. **Rejection banner** - a red strip shown only when the report was rejected,
+  ///      displaying the accessor's rejection reason.
+  ///   3. **Body** - estimated value, creation date, short description preview,
+  ///      and a row of action icon buttons:
+  ///        - PDF icon   - opens the server PDF or generates a local preview.
+  ///        - Edit icon  - opens the valuation form for editing (editable reports only).
+  ///        - Submit icon - opens the form to review and submit (draft/rejected only).
+  ///        - Delete icon - asks for confirmation then deletes (deletable reports only).
   Widget _buildReportCard(Valuation valuation, Project project) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // statusColor drives the header tint, icon colour, and badge background
     final statusColor =
         FieldOfficerUiHelpers.getValuationStatusColor(valuation.status);
+    // Convenience flags used to show/hide the edit, submit, and delete buttons
     final isDraft = valuation.status == 'draft';
     final isRejected = valuation.status == 'rejected';
 
@@ -472,8 +505,11 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    // PDF button: opens server-stored PDF if available, else generates local preview
-                    // Priority: final report (senior valuer) > submitted report (field officer) > local preview
+                    // PDF button logic:
+                    // - If a server-side PDF already exists (final or submitted), open it
+                    //   in the device's external PDF viewer via a URL.
+                    // - Otherwise, generate a local PDF preview on the fly and open it.
+                    // Priority: final report (senior valuer signed) > submitted (field officer) > local preview.
                     if (valuation.finalReportUrl != null || valuation.submittedReportUrl != null)
                       IconButton(
                         icon: const Icon(Icons.picture_as_pdf_outlined),
@@ -493,6 +529,8 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                         },
                       )
                     else 
+                      // No server PDF yet — generate a local preview so the field officer
+                      // can review the report before submitting it.
                       // Generate Review PDF for any status
                       IconButton(
                         icon: const Icon(Icons.picture_as_pdf),
@@ -515,6 +553,7 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                       ),
 
                     // Edit button — only shown when the valuation is in an editable state
+                    // (editable = draft or rejected; submitted/approved cannot be edited)
                     if (FieldOfficerUiHelpers.canEditValuation(valuation))
                       IconButton(
                         icon: const Icon(Icons.edit_outlined),
@@ -535,7 +574,9 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                         },
                       ),
                       
-                    // Submit button — shown for draft and rejected reports
+                    // Submit button — shown for draft and rejected reports.
+                    // Opens the valuation form so the user can review the details
+                    // and tap "Submit" inside the form to send it to the accessor.
                     if (isDraft || isRejected)
                        IconButton(
                         icon: const Icon(Icons.send_rounded),
@@ -557,7 +598,8 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
                         },
                       ),
 
-                    // Delete button — only shown when the valuation can be deleted
+                    // Delete button — only shown when the valuation can be deleted.
+                    // Deletable = draft or rejected (cannot delete submitted/approved reports).
                     if (FieldOfficerUiHelpers.canDeleteValuation(valuation))
                       IconButton(
                         icon: const Icon(Icons.delete_outline),
@@ -575,7 +617,12 @@ class _ValuationReportsScreenState extends State<ValuationReportsScreen> {
     );
   }
 
-  /// Returns the appropriate icon for a given valuation [category].
+  /// Returns the icon that best represents a valuation [category].
+  ///
+  /// - "land"     -> mountain/landscape icon
+  /// - "building" -> city building icon
+  /// - "vehicle"  -> car icon
+  /// - anything else -> generic category icon
   IconData _getCategoryIcon(String category) {
     switch (category.toLowerCase()) {
       case 'land':

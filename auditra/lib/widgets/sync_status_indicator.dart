@@ -3,7 +3,15 @@ import 'dart:async';
 import '../services/sync_engine.dart';
 import '../services/network_service.dart';
 
-/// Widget to display sync status and network connectivity
+/// A small pill-shaped badge displayed in the app bar that shows network and sync status.
+///
+/// Possible appearances:
+///   - White pill, cloud-done icon, "Online"  — connected, nothing pending.
+///   - Orange pill, cloud-off icon, "Offline"  — no internet connection.
+///   - White pill, spinning loader + orange badge number — actively uploading queued items.
+///
+/// Tapping the pill triggers an immediate manual sync if the device is online
+/// and there are pending items waiting to be uploaded to the server.
 class SyncStatusIndicator extends StatefulWidget {
   const SyncStatusIndicator({super.key});
 
@@ -11,15 +19,24 @@ class SyncStatusIndicator extends StatefulWidget {
   State<SyncStatusIndicator> createState() => _SyncStatusIndicatorState();
 }
 
+/// State class for [SyncStatusIndicator].
+///
+/// Tracks three values that drive the pill's appearance:
+///   - `_isOnline`     — true when the device has a working internet connection.
+///   - `_isSyncing`    — true while the sync engine is actively uploading data.
+///   - `_pendingCount` — total number of items in all offline queues combined.
 class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
-  bool _isOnline = true;
-  bool _isSyncing = false;
-  int _pendingCount = 0;
-  StreamSubscription? _networkSubscription;
-  Function(Map<String, dynamic>)? _syncListener;
-  DateTime? _lastLoadTime;
-  static const _loadDebounceMs = 500; // Debounce status loads
+  bool _isOnline = true;       // Is the device currently connected to the internet?
+  bool _isSyncing = false;     // Is a sync upload pass running right now?
+  int _pendingCount = 0;       // Total queued items across all four offline queues
+  StreamSubscription? _networkSubscription; // Cancels the network listener on dispose
+  Function(Map<String, dynamic>)? _syncListener; // Cancels the sync event listener on dispose
+  DateTime? _lastLoadTime;     // Tracks the last time _loadStatus ran (for debouncing)
+  static const _loadDebounceMs = 500; // Do not reload faster than once every 500 ms
 
+  /// Called once when the widget is first inserted into the widget tree.
+  /// Loads the current sync status immediately, then sets up live listeners
+  /// so the pill updates automatically whenever network state or sync events change.
   @override
   void initState() {
     super.initState();
@@ -27,6 +44,15 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
     _setupListeners();
   }
 
+  /// Reads the latest sync status from [SyncEngine] and updates this widget's state.
+  ///
+  /// Includes a 500 ms debounce: if called multiple times in rapid succession
+  /// (e.g. many network events at once), only the first call within each
+  /// 500 ms window actually runs. Pass `force: true` to always reload immediately
+  /// regardless of the debounce timer.
+  ///
+  /// Falls back to safe defaults (online = true, syncing = false, pending = 0)
+  /// if [NetworkService] or [SyncEngine] are not yet initialised.
   Future<void> _loadStatus({bool force = false}) async {
     // Debounce rapid calls
     final now = DateTime.now();
@@ -82,8 +108,19 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
     }
   }
 
+  /// Registers two live listeners so the pill updates automatically:
+  ///
+  ///   1. **Network stream** — rebuilds the online/offline indicator the moment
+  ///      connectivity changes (Wi-Fi drops, mobile data reconnects, etc.).
+  ///      A 300 ms delay is added before reloading the full status to let the
+  ///      connection stabilise first.
+  ///
+  ///   2. **SyncEngine listener** — reacts to specific sync lifecycle events:
+  ///      - `syncStart`     — shows the spinning loader.
+  ///      - `syncComplete` / `syncError` — hides the loader, refreshes count.
+  ///      - `valuationSynced` — refreshes the pending count badge.
+  ///      - `syncSuccess`   — hides loader, refreshes count, shows a green snackbar.
   void _setupListeners() {
-    // Listen to network changes
     _networkSubscription = NetworkService.networkStatusStream.listen((isOnline) {
       if (mounted) {
         setState(() {
@@ -142,6 +179,9 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
     SyncEngine.addListener(_syncListener!);
   }
 
+  /// Cancels the network subscription and removes the sync listener when this
+  /// widget is removed from the screen. This prevents memory leaks and stops
+  /// setState being called on a widget that no longer exists.
   @override
   void dispose() {
     _networkSubscription?.cancel();
@@ -151,6 +191,12 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
     super.dispose();
   }
 
+  /// Called when the user taps the pill badge.
+  /// Triggers an immediate full sync only if all three conditions are met:
+  ///   (a) the device is currently online,
+  ///   (b) there is at least one pending item in the queue, and
+  ///   (c) no sync pass is already running.
+  /// After the sync finishes, refreshes the pending count.
   Future<void> _handleManualSync() async {
     if (_isOnline && _pendingCount > 0 && !_isSyncing) {
       await SyncEngine.syncAll();
@@ -158,6 +204,17 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
     }
   }
 
+  /// Builds the pill-shaped container that shows network / sync status.
+  ///
+  /// Layout inside the pill (left to right):
+  ///   - Left icon: spinning CircularProgressIndicator while uploading,
+  ///     otherwise cloud-done (online) or cloud-off (offline).
+  ///   - Label: "Online" or "Offline" in matching colour.
+  ///   - Orange badge (right side): only shown when `_pendingCount > 0`;
+  ///     displays the number of queued items waiting to upload.
+  ///
+  /// The whole pill is wrapped in a [GestureDetector] so tapping it
+  /// calls [_handleManualSync].
   @override
   Widget build(BuildContext context) {
     return GestureDetector(

@@ -28,7 +28,7 @@ class NetworkService {
         
         // Quick check: if results contain none or is empty, immediately mark as offline
         if (results.isEmpty || results.contains(ConnectivityResult.none)) {
-          print('📴 Connectivity change detected: No network (airplane mode?)');
+          print('Connectivity change detected: No network (airplane mode?)');
           _isOnline = false;
           if (wasOnline != _isOnline) {
             _controller.add(_isOnline);
@@ -41,14 +41,14 @@ class NetworkService {
         
         // Only emit if status actually changed
         if (wasOnline != _isOnline) {
-          print('📶 Network status changed: ${_isOnline ? "Online" : "Offline"}');
+          print('Network status changed: ${_isOnline ? "Online" : "Offline"}');
           _controller.add(_isOnline);
         }
       },
     );
 
     _isInitialized = true;
-    print('✅ Network service initialized (Online: $_isOnline)');
+    print('Network service initialized (Online: $_isOnline)');
   }
 
   /// Check actual internet connectivity (not just WiFi/Data connection)
@@ -59,7 +59,7 @@ class NetworkService {
       
       // If no connectivity at all (airplane mode, no WiFi, no mobile data), return false immediately
       if (connectivityResults.isEmpty || connectivityResults.contains(ConnectivityResult.none)) {
-        print('📴 No network connectivity detected (airplane mode or no network)');
+        print('No network connectivity detected (airplane mode or no network)');
         return false;
       }
 
@@ -83,12 +83,12 @@ class NetworkService {
           return true;
         } catch (e2) {
           // Both failed, no internet connectivity
-          print('📴 HTTP connectivity check failed: $e2');
+          print('HTTP connectivity check failed: $e2');
           return false;
         }
       }
     } catch (e) {
-      print('📴 Error checking connectivity: $e');
+      print('Error checking connectivity: $e');
       return false;
     }
   }

@@ -6,10 +6,37 @@ import '../models/project_model.dart';
 
 const _uuid = Uuid();
 
-/// Service for managing offline storage of data
+/// Handles reading and writing every type of offline data for field officers.
+///
+/// This is the main entry point for saving data locally when there is no
+/// internet connection. It wraps [OfflineDBService] (the raw Hive boxes) with
+/// higher-level methods that:
+///   - Assign a unique local ID (UUID) to each new offline record.
+///   - Stamp every record with a `syncStatus` code:
+///       0 = Queued (waiting to be uploaded)
+///       1 = Synced  (already uploaded to the server)
+///       2 = Syncing (upload is in progress right now)
+///       3 = Failed  (upload failed; will retry after a back-off delay)
+///   - Apply exponential back-off on failures (first retry after 30 s,
+///     then 60 s, 2 min, 4 min … up to a maximum of 1 hour).
+///
+/// Types of data managed:
+///   - Valuations   → `saveValuationOffline`, `getUnsyncedValuations`, etc.
+///   - Projects     → `cacheProjects`, `getCachedProjects`, etc.
+///   - Attendance   → `saveAttendanceOffline`, `getUnsyncedAttendance`, etc.
+///   - Photos       → `savePhotoOffline`, `getUnsyncedPhotos`, etc.
+///   - Submit queue → `queueValuationSubmissionOffline`, `getUnsyncedSubmitActions`, etc.
 class OfflineStorageService {
-  /// Save valuation offline
-  /// Returns localId (UUID) for the saved valuation
+  /// Saves a valuation report to the local Hive database when offline.
+  ///
+  /// Generates a UUID as the `localId` (a temporary ID that lives only on
+  /// this device until the record is uploaded to the server and gets a real
+  /// server-side integer ID).
+  ///
+  /// The record is saved with `syncStatus = 0` (Queued) so [SyncEngine]
+  /// will automatically pick it up and upload it when internet returns.
+  ///
+  /// Returns the `localId` so the caller can reference this record later.
   static Future<String> saveValuationOffline(Map<String, dynamic> valuationData) async {
     if (!await OfflineDBService.isOfflineModeEnabled()) {
       throw Exception('Offline mode not enabled for this user');
@@ -41,7 +68,8 @@ class OfflineStorageService {
     return localId;
   }
 
-  /// Get all offline valuations
+  /// Returns every valuation currently in the local Hive box, regardless of
+  /// sync status. Returns an empty list if the database is not initialised.
   static List<Map<String, dynamic>> getAllOfflineValuations() {
     if (!OfflineDBService.isInitialized) {
       return [];
@@ -54,12 +82,14 @@ class OfflineStorageService {
     }
   }
 
-  /// Get unsynced valuations.
+  /// Returns valuations that still need to be uploaded to the server.
   ///
-  /// Includes:
-  ///   - Queued (`syncStatus == 0`)
-  ///   - Failed (`syncStatus == 3`) whose `nextRetryAt` has elapsed
-  ///     (exponential back-off, see [updateValuationSyncStatus]).
+  /// A valuation is included if:
+  ///   - `syncStatus == 0` (Queued — never tried yet), OR
+  ///   - `syncStatus == 3` (Failed) AND the `nextRetryAt` timestamp has passed
+  ///     (exponential back-off delay is over, so it is ready to retry).
+  ///
+  /// Valuations with status 1 (Synced) or 2 (currently Syncing) are excluded.
   static List<Map<String, dynamic>> getUnsyncedValuations() {
     if (!OfflineDBService.isInitialized) {
       return [];
@@ -91,7 +121,11 @@ class OfflineStorageService {
     }
   }
 
-  /// Mark valuation as synced
+  /// Called after a valuation has been successfully uploaded to the server.
+  ///
+  /// Deletes the local copy entirely — once the server has the record there
+  /// is no need to keep it on the device too. The `serverId` passed in is
+  /// the integer primary-key assigned by the server.
   static Future<void> markValuationSynced(String localId, int serverId) async {
     if (!OfflineDBService.isInitialized) {
       return;
@@ -107,10 +141,15 @@ class OfflineStorageService {
     }
   }
 
-  /// Update syncStatus for a queued valuation (0=Queued,1=Synced,2=Syncing,3=Failed).
+  /// Updates the `syncStatus` field of a queued valuation.
   ///
-  /// On Failed (3), bumps `retryCount` and computes an exponential-back-off
-  /// `nextRetryAt` (capped at 1 hour).
+  /// Status codes: 0 = Queued, 1 = Synced, 2 = Syncing, 3 = Failed.
+  ///
+  /// When status is set to 3 (Failed), this method also computes an
+  /// exponential back-off delay before the next retry:
+  ///   attempt 1 → 30 s, attempt 2 → 60 s, attempt 3 → 2 min … max 1 hour.
+  /// The `nextRetryAt` timestamp is stored so [getUnsyncedValuations] knows
+  /// when to include the record again.
   static Future<void> updateValuationSyncStatus(String localId, int status) async {
     if (!OfflineDBService.isInitialized) return;
     final box = OfflineDBService.valuationsBox;
@@ -134,7 +173,11 @@ class OfflineStorageService {
     }
   }
 
-  /// Update valuation with server data
+  /// Merges fresh data from the server into an existing local valuation record.
+  ///
+  /// Local-only fields (`localId`) are preserved. The `serverId` and
+  /// `syncStatus` are updated to reflect the server's response.
+  /// Use this when the server returns updated data after a successful upload.
   static Future<void> updateValuationFromServer(String localId, Map<String, dynamic> serverData) async {
     final box = OfflineDBService.valuationsBox;
     final valuation = box.get(localId) as Map<String, dynamic>?;
@@ -154,7 +197,7 @@ class OfflineStorageService {
     }
   }
 
-  /// Delete valuation
+  /// Permanently removes a valuation record from the local database by its `localId`.
   static Future<void> deleteValuation(String localId) async {
     if (!OfflineDBService.isInitialized) {
       return;
@@ -163,7 +206,10 @@ class OfflineStorageService {
     await box.delete(localId);
   }
 
-  /// Clean up synced valuations (remove valuations that have been successfully synced)
+  /// Scans the valuations box and deletes every record that has already been
+  /// successfully synced (`syncStatus == 1`). This keeps the local database
+  /// small — once the server has the data, there is no reason to store it locally.
+  /// Returns the number of records that were deleted.
   static Future<int> cleanupSyncedValuations() async {
     if (!OfflineDBService.isInitialized) {
       return 0;
@@ -198,7 +244,10 @@ class OfflineStorageService {
     }
   }
 
-  /// Delete all unsynced valuations (use with caution - this removes all pending sync items)
+  /// Deletes every queued (not-yet-synced) valuation from the local database.
+  /// WARNING: this permanently discards all pending offline data that has not
+  /// yet reached the server. Only call this at explicit user request.
+  /// Returns the number of records deleted.
   static Future<int> deleteAllUnsyncedValuations() async {
     if (!OfflineDBService.isInitialized) {
       return 0;
@@ -233,14 +282,20 @@ class OfflineStorageService {
     }
   }
 
-  /// Get valuation by localId
+  /// Looks up a single valuation in the local database by its device-assigned UUID.
+  /// Returns null if no record with that `localId` exists.
   static Map<String, dynamic>? getValuationByLocalId(String localId) {
     final box = OfflineDBService.valuationsBox;
     final value = box.get(localId);
     return value != null ? Map<String, dynamic>.from(value as Map) : null;
   }
 
-  /// Cache projects for offline access
+  /// Saves the full project list to the local database so the field officer
+  /// can still see their projects when there is no internet.
+  ///
+  /// Each [Project] object is converted to a JSON map before storage.
+  /// Also saves a `last_updated` timestamp so the app can show when the
+  /// cache was last refreshed.
   static Future<void> cacheProjects(List<Project> projects) async {
     if (!await OfflineDBService.isOfflineModeEnabled()) {
       return;
@@ -262,7 +317,9 @@ class OfflineStorageService {
     print('💾 Cached ${projects.length} projects for offline access');
   }
 
-  /// Get cached projects
+  /// Reads the cached project list from local storage and converts each JSON
+  /// map back into a [Project] object. Returns null if nothing has been cached
+  /// yet (i.e. the field officer has never been online since install).
   static List<Project>? getCachedProjects() {
     if (!OfflineDBService.isInitialized) {
       return null;
@@ -284,20 +341,22 @@ class OfflineStorageService {
     }
   }
 
-  /// Get last cache update time
+  /// Returns the date and time when the project list was last downloaded
+  /// from the server. Returns null if the cache has never been filled.
   static DateTime? getCacheLastUpdated() {
     final box = OfflineDBService.projectsCacheBox;
     final timestamp = box.get('last_updated') as String?;
     return timestamp != null ? DateTime.parse(timestamp) : null;
   }
 
-  /// Clear project cache
+  /// Removes all cached project data from local storage (project list and timestamps).
   static Future<void> clearProjectCache() async {
     final box = OfflineDBService.projectsCacheBox;
     await box.clear();
   }
 
-  /// Cache project visits for offline access by project id.
+  /// Saves the visit / check-in history for a specific project to local storage.
+  /// Keyed by `project_visits_<projectId>` so each project has its own entry.
   static Future<void> cacheProjectVisits(
     int projectId,
     List<Map<String, dynamic>> visits,
@@ -316,7 +375,8 @@ class OfflineStorageService {
     );
   }
 
-  /// Get cached project visits by project id.
+  /// Reads the cached visit list for the given project from local storage.
+  /// Returns null if no visits have been cached for that project yet.
   static List<Map<String, dynamic>>? getCachedProjectVisits(int projectId) {
     if (!OfflineDBService.isInitialized) return null;
     try {
@@ -329,7 +389,11 @@ class OfflineStorageService {
     }
   }
 
-  /// Save attendance offline
+  /// Saves an attendance action (check-in, check-out, overtime start/end) to
+  /// local storage with `syncStatus = 0` (Queued) so [SyncEngine] will upload
+  /// it when the device is back online.
+  ///
+  /// Returns the UUID assigned to this local record.
   static Future<String> saveAttendanceOffline(Map<String, dynamic> attendanceData) async {
     if (!await OfflineDBService.isOfflineModeEnabled()) {
       throw Exception('Offline mode not enabled for this user');
@@ -353,13 +417,15 @@ class OfflineStorageService {
     return localId;
   }
 
-  /// Get offline attendance records
+  /// Returns all attendance records currently in local storage (all sync statuses).
   static List<Map<String, dynamic>> getOfflineAttendance() {
     final box = OfflineDBService.attendanceBox;
     return box.values.map((value) => Map<String, dynamic>.from(value as Map)).toList();
   }
 
-  /// Get unsynced attendance records (queued or retry-eligible failures).
+  /// Returns attendance records that still need to be uploaded to the server.
+  /// Same filter logic as [getUnsyncedValuations]: status 0 (Queued), or
+  /// status 3 (Failed) whose back-off delay has expired.
   static List<Map<String, dynamic>> getUnsyncedAttendance() {
     if (!OfflineDBService.isInitialized) {
       return [];
@@ -391,8 +457,9 @@ class OfflineStorageService {
     }
   }
 
-  /// Mark an attendance record as Failed with exponential back-off (see
-  /// [updateValuationSyncStatus] for the same algorithm).
+  /// Marks an attendance record as Failed (status 3) and computes the next
+  /// retry time using exponential back-off (same algorithm as
+  /// [updateValuationSyncStatus]: 30 s, 60 s, 2 min … capped at 1 hour).
   static Future<void> markAttendanceFailed(String localId) async {
     if (!OfflineDBService.isInitialized) return;
     final box = OfflineDBService.attendanceBox;
@@ -408,7 +475,8 @@ class OfflineStorageService {
     await box.put(localId, map);
   }
 
-  /// Mark attendance as synced
+  /// Marks an attendance record as successfully synced (status 1) and
+  /// stores the server-assigned ID so we have a reference to the server record.
   static Future<void> markAttendanceSynced(String localId, int serverId) async {
     final box = OfflineDBService.attendanceBox;
     final attendance = box.get(localId) as Map<String, dynamic>?;
@@ -421,8 +489,13 @@ class OfflineStorageService {
     }
   }
 
-  /// Save photo offline to filesystem
-  /// Returns the file path where photo is stored
+  /// Copies a photo file into the app's private documents folder and records
+  /// its path and metadata in the photos cache box with `syncStatus = 0`.
+  ///
+  /// Photos are organised in sub-folders by valuation:
+  ///   `<appDocumentsDir>/photos/<valuationLocalId>/photo_<timestamp>.jpg`
+  ///
+  /// Returns the full path where the photo was saved on disk.
   static Future<String> savePhotoOffline(File photoFile, String valuationLocalId) async {
     try {
       final appDir = await getApplicationDocumentsDirectory();
@@ -459,14 +532,16 @@ class OfflineStorageService {
     }
   }
 
-  /// Get photo file path by photo ID
+  /// Looks up a photo record by its UUID and returns the local file path.
+  /// Returns null if the photo ID is not found in the cache.
   static String? getPhotoPath(String photoId) {
     final box = OfflineDBService.photosCacheBox;
     final photoData = box.get(photoId) as Map<String, dynamic>?;
     return photoData?['filePath'] as String?;
   }
 
-  /// Get all photos for a valuation
+  /// Returns all photos that belong to a specific offline valuation,
+  /// identified by its `valuationLocalId` UUID.
   static List<Map<String, dynamic>> getPhotosForValuation(String valuationLocalId) {
     final box = OfflineDBService.photosCacheBox;
     return box.values
@@ -478,7 +553,7 @@ class OfflineStorageService {
         .toList();
   }
 
-  /// Get unsynced photos (queued or retry-eligible failures).
+  /// Returns photos that still need to be uploaded (status 0 or retry-ready status 3).
   static List<Map<String, dynamic>> getUnsyncedPhotos() {
     if (!OfflineDBService.isInitialized) {
       return [];
@@ -510,7 +585,8 @@ class OfflineStorageService {
     }
   }
 
-  /// Mark photo as synced
+  /// Marks a photo record as successfully uploaded (status 1) and stores the
+  /// server-assigned ID. Clears `retryCount` and `nextRetryAt`.
   static Future<void> markPhotoSynced(String photoId, int serverId) async {
     final box = OfflineDBService.photosCacheBox;
     final photo = box.get(photoId) as Map<String, dynamic>?;
@@ -525,7 +601,8 @@ class OfflineStorageService {
     }
   }
 
-  /// Mark a photo record as Failed with exponential back-off.
+  /// Marks a photo upload as Failed (status 3) and sets the next retry time
+  /// using exponential back-off (same algorithm as [updateValuationSyncStatus]).
   static Future<void> markPhotoFailed(String photoId) async {
     final box = OfflineDBService.photosCacheBox;
     final photo = box.get(photoId) as Map<String, dynamic>?;
@@ -539,7 +616,14 @@ class OfflineStorageService {
     await box.put(photoId, photo);
   }
 
-  /// Queue a valuation submit action for automatic retry when online.
+  /// Queues a "submit this valuation to the accessor" action for later execution.
+  ///
+  /// The field officer may tap "Submit to Accessor" while offline. Instead of
+  /// failing, this method saves the intent locally. When the device goes online,
+  /// [SyncEngine] reads this queue and calls `ApiService.submitValuation` for each
+  /// entry, which generates the PDF and changes the valuation status to "submitted".
+  ///
+  /// Returns the UUID of the new queue entry.
   static Future<String> queueValuationSubmissionOffline({
     required int valuationId,
     int? projectId,
@@ -570,7 +654,8 @@ class OfflineStorageService {
     return localId;
   }
 
-  /// Get queued valuation submit actions (queued/retry-eligible failed).
+  /// Returns submission queue entries that are ready to be sent to the server
+  /// (status 0, or status 3 whose back-off delay has expired).
   static List<Map<String, dynamic>> getUnsyncedSubmitActions() {
     if (!OfflineDBService.isInitialized) {
       return [];
@@ -603,6 +688,8 @@ class OfflineStorageService {
     }
   }
 
+  /// Marks a submit-action queue entry as "in progress" (status 2) so that
+  /// [SyncEngine] does not attempt to run it twice at the same time.
   static Future<void> markSubmitActionSyncing(String id) async {
     if (!OfflineDBService.isInitialized) return;
     final box = OfflineDBService.syncQueueBox;
@@ -613,12 +700,16 @@ class OfflineStorageService {
     await box.put(id, map);
   }
 
+  /// Deletes a submit-action queue entry after it has been successfully
+  /// processed by the server. No further retries are needed.
   static Future<void> markSubmitActionSynced(String id) async {
     if (!OfflineDBService.isInitialized) return;
     final box = OfflineDBService.syncQueueBox;
     await box.delete(id);
   }
 
+  /// Marks a submit-action as Failed (status 3) and applies exponential
+  /// back-off so the engine does not hammer the server on repeated failures.
   static Future<void> markSubmitActionFailed(String id) async {
     if (!OfflineDBService.isInitialized) return;
     final box = OfflineDBService.syncQueueBox;
@@ -634,7 +725,17 @@ class OfflineStorageService {
     await box.put(id, map);
   }
 
-  /// Get statistics
+  /// Returns a count summary of unsynced and total records across all five
+  /// data types. Example:
+  /// ```
+  /// {
+  ///   'unsynced_valuations': 2,  'total_valuations': 5,
+  ///   'unsynced_attendance': 1,  'total_attendance': 3,
+  ///   'unsynced_photos': 4,      'total_photos': 10,
+  ///   'unsynced_submit_actions': 1, 'total_submit_actions': 2,
+  /// }
+  /// ```
+  /// Returns all zeros if the database is not initialised yet.
   static Map<String, int> getStats() {
     if (!OfflineDBService.isInitialized) {
       return {

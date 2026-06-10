@@ -358,6 +358,8 @@ class _VisitSchedulingScreenState extends State<VisitSchedulingScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _scheduleVisit,
+        backgroundColor: const Color(0xFF1565C0),
+        foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(widget.fabLabel ?? 'Schedule Visit'),
       ),

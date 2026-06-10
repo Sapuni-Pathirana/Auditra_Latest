@@ -17,10 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 class ValuationListCreateView(generics.ListCreateAPIView):
-    """List and create valuations"""
+    """Handles listing existing valuations and creating a new valuation."""
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        """Returns only the valuations the logged-in user is allowed to see."""
         user = self.request.user
         project_id = self.request.query_params.get('project', None)
 
@@ -40,11 +41,13 @@ class ValuationListCreateView(generics.ListCreateAPIView):
         return queryset.select_related('project', 'field_officer').prefetch_related('photos')
     
     def get_serializer_class(self):
+        """Uses the create serializer for POST and the read serializer for GET."""
         if self.request.method == 'POST':
             return ValuationCreateSerializer
         return ValuationSerializer
     
     def perform_create(self, serializer):
+        """Saves the valuation, then writes logs and sends basic notifications."""
         instance = serializer.save(field_officer=self.request.user)
 
         try:
@@ -93,7 +96,7 @@ class ValuationListCreateView(generics.ListCreateAPIView):
             pass
     
     def create(self, request, *args, **kwargs):
-        """Override create to provide better error messages and return full object with id"""
+        """Validates input and returns the full created valuation object with its id."""
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             return Response(
@@ -113,11 +116,12 @@ class ValuationListCreateView(generics.ListCreateAPIView):
 
 
 class ValuationDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Retrieve, update, or delete a valuation"""
+    """Handles viewing, editing, and deleting one valuation."""
     permission_classes = [IsAuthenticated]
     serializer_class = ValuationSerializer
     
     def get_queryset(self):
+        """Limits access so users only open valuations they are allowed to manage."""
         user = self.request.user
         
         # Field Officers see their own valuations
@@ -132,12 +136,13 @@ class ValuationDetailView(generics.RetrieveUpdateDestroyAPIView):
         ).prefetch_related('photos')
     
     def get_serializer_class(self):
+        """Uses the write serializer for updates and the read serializer otherwise."""
         if self.request.method in ['PUT', 'PATCH']:
             return ValuationCreateSerializer
         return ValuationSerializer
     
     def update(self, request, *args, **kwargs):
-        """Override update to check if valuation can be edited"""
+        """Checks whether the valuation is still editable before saving changes."""
         instance = self.get_object()
         
         # Check if valuation can be edited (draft or submitted within 2 hours)
@@ -167,7 +172,7 @@ class ValuationDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def submit_valuation(request, pk):
-    """Submit a valuation (change status from draft to submitted)"""
+    """Submits a draft or rejected valuation so it can move to review."""
     valuation = get_object_or_404(
         Valuation,
         pk=pk,
@@ -181,9 +186,10 @@ def submit_valuation(request, pk):
         )
    
     is_resubmit = valuation.status == 'rejected'
+    # Move the valuation into the submitted state using the model helper.
     valuation.submit()
 
-    # Create history entry
+    # Record the action in valuation history so later reviewers can track it.
     ValuationHistory.objects.create(
         valuation=valuation,
         action='resubmitted' if is_resubmit else 'submitted',
@@ -204,7 +210,7 @@ def submit_valuation(request, pk):
     except Exception as e:
         logger.warning(f"Failed to log valuation submission for valuation {valuation.id}: {str(e)}")
 
-    # Feature #3 (C1): notify the accessor / next reviewer.
+    # Inform the next reviewer that a new valuation is ready for review.
     try:
         from notifications.services import notify
         project = valuation.project
@@ -232,13 +238,14 @@ def submit_valuation(request, pk):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upload_submitted_report(request, pk):
-    """Upload the field officer's generated PDF report for a valuation"""
+    """Uploads the field officer's generated PDF file for a valuation."""
     valuation = get_object_or_404(
         Valuation,
         pk=pk,
         field_officer=request.user
     )
 
+    # The mobile app sends the generated PDF using the submitted_report field.
     report_file = request.FILES.get('submitted_report', None)
     if not report_file:
         return Response(
@@ -282,10 +289,11 @@ def upload_submitted_report(request, pk):
 
 
 class ValuationPhotoListCreateView(generics.ListCreateAPIView):
-    """List and create valuation photos"""
+    """Lists photos for one valuation and lets the field officer add new photos."""
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        """Returns only the photos that belong to the requested valuation."""
         valuation_id = self.kwargs.get('valuation_id')
         return ValuationPhoto.objects.filter(
             valuation_id=valuation_id,
@@ -293,11 +301,13 @@ class ValuationPhotoListCreateView(generics.ListCreateAPIView):
         )
     
     def get_serializer_class(self):
+        """Uses the upload serializer for POST and the read serializer for GET."""
         if self.request.method == 'POST':
             return ValuationPhotoCreateSerializer
         return ValuationPhotoSerializer
     
     def perform_create(self, serializer):
+        """Makes sure the photo is attached to a valuation owned by this user."""
         valuation_id = self.kwargs.get('valuation_id')
         valuation = get_object_or_404(
             Valuation,
@@ -308,11 +318,12 @@ class ValuationPhotoListCreateView(generics.ListCreateAPIView):
 
 
 class ValuationPhotoDetailView(generics.RetrieveDestroyAPIView):
-    """Retrieve or delete a valuation photo"""
+    """Lets a field officer view or delete one uploaded photo."""
     permission_classes = [IsAuthenticated]
     serializer_class = ValuationPhotoSerializer
     
     def get_queryset(self):
+        """Restricts photo access to the logged-in field officer's valuations."""
         return ValuationPhoto.objects.filter(
             valuation__field_officer=self.request.user
         )
@@ -322,7 +333,7 @@ class ValuationPhotoDetailView(generics.RetrieveDestroyAPIView):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def accept_valuation(request, pk):
-    """Accept a valuation (change status to reviewed) and send to senior valuer for approval"""
+    """Accepts a valuation at accessor stage and forwards it to the senior valuer."""
     valuation = get_object_or_404(Valuation, pk=pk)
     
     # Check if user is an accessor (has accessor role)
@@ -353,15 +364,15 @@ def accept_valuation(request, pk):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Change status to reviewed (accessor acceptance - not final approval)
-    # Reports are automatically sent to senior valuer for final approval
+    # The accessor marks the valuation as reviewed.
+    # Final approval still belongs to the senior valuer.
     valuation.status = 'reviewed'
 
-    # Save accessor comments if provided
+    # Save any review notes written by the accessor.
     accessor_comments = request.data.get('accessor_comments', '').strip()
     valuation.accessor_comments = accessor_comments
 
-    # Clear rejection reason if it exists
+    # Clear an older rejection reason because the report is moving forward again.
     valuation.rejection_reason = ''
     valuation.save(update_fields=['status', 'accessor_comments', 'rejection_reason', 'updated_at'])
     
@@ -378,7 +389,7 @@ def accept_valuation(request, pk):
         created_by=request.user
     )
 
-    # Create valuation history entry
+    # Keep an audit trail of the accessor's decision.
     ValuationHistory.objects.create(
         valuation=valuation,
         action='reviewed',
@@ -399,7 +410,7 @@ def accept_valuation(request, pk):
     except Exception:
         pass
 
-    # Feature #3 (C1): notify the senior valuer and the field officer.
+    # Notify both the next reviewer and the field officer about this decision.
     try:
         from notifications.services import notify
         sv = valuation.project.assigned_senior_valuer
@@ -436,7 +447,7 @@ def accept_valuation(request, pk):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def reject_valuation(request, pk):
-    """Reject a valuation (change status to rejected)"""
+    """Rejects a valuation at accessor stage and stores the rejection reason."""
     valuation = get_object_or_404(Valuation, pk=pk)
     
     # Check if user is an accessor (has accessor role)
@@ -460,7 +471,7 @@ def reject_valuation(request, pk):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Get rejection reason from request
+    # A rejection reason is required so the field officer knows what to fix.
     rejection_reason = request.data.get('rejection_reason', '').strip()
     if not rejection_reason:
         return Response(
@@ -468,7 +479,7 @@ def reject_valuation(request, pk):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Update valuation status and rejection reason
+    # Save the rejection decision directly on the valuation.
     valuation.status = 'rejected'
     valuation.rejection_reason = rejection_reason
     valuation.save(update_fields=['status', 'rejection_reason', 'updated_at'])
@@ -482,7 +493,7 @@ def reject_valuation(request, pk):
         created_by=request.user
     )
 
-    # Create valuation history entry
+    # Store this decision in the valuation history table.
     ValuationHistory.objects.create(
         valuation=valuation,
         action='rejected_by_accessor',
@@ -490,7 +501,7 @@ def reject_valuation(request, pk):
         comments=rejection_reason,
     )
 
-    # Notify field officer
+    # Notify the field officer so they can revise and resubmit the report.
     accessor_name = request.user.get_full_name() or request.user.username
     send_notification(
         user=valuation.field_officer,
@@ -520,11 +531,12 @@ def reject_valuation(request, pk):
 
 
 class SeniorValuerValuationListView(generics.ListAPIView):
-    """List reviewed valuations assigned to senior valuer"""
+    """Shows reviewed valuations that are waiting for the senior valuer."""
     permission_classes = [IsAuthenticated]
     serializer_class = ValuationSerializer
     
     def get_queryset(self):
+        """Returns only reviewed valuations assigned to the logged-in senior valuer."""
         user = self.request.user
         
         # Check if user is a senior valuer
@@ -548,7 +560,7 @@ class SeniorValuerValuationListView(generics.ListAPIView):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def senior_valuer_submit_proposal(request, pk):
-    """Submit senior valuer's proposal for a reviewed valuation"""
+    """Saves the senior valuer's comments or final report file before approval."""
     valuation = get_object_or_404(Valuation, pk=pk)
     
     # Check if user is a senior valuer
@@ -572,11 +584,11 @@ def senior_valuer_submit_proposal(request, pk):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Get proposal data from request
+    # Read optional comments and optional uploaded report from the request.
     senior_valuer_comments = request.data.get('senior_valuer_comments', '').strip()
     final_report = request.FILES.get('final_report', None)
     
-    # Update valuation with senior valuer's proposal
+    # Save only the proposal fields that were actually provided.
     if senior_valuer_comments:
         valuation.senior_valuer_comments = senior_valuer_comments
     if final_report:
@@ -618,7 +630,7 @@ def senior_valuer_submit_proposal(request, pk):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def senior_valuer_approve_valuation(request, pk):
-    """Approve a valuation (change status to approved) - Only senior valuer can do this"""
+    """Approves a reviewed valuation and sends it to MD/GM for final approval."""
     valuation = get_object_or_404(Valuation, pk=pk)
     
     # Check if user is a senior valuer (has senior_valuer role)
@@ -642,12 +654,13 @@ def senior_valuer_approve_valuation(request, pk):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Save senior valuer comments if provided
+    # Save review comments if the senior valuer added any.
     senior_valuer_comments = request.data.get('senior_valuer_comments', '').strip()
     if senior_valuer_comments:
         valuation.senior_valuer_comments = senior_valuer_comments
 
-    # Change status to approved (sends to MD/GM for final approval)
+    # This status means the senior valuer approved it.
+    # The next step is final MD/GM approval.
     valuation.status = 'approved'
 
     update_fields = ['status', 'updated_at']
@@ -664,7 +677,7 @@ def senior_valuer_approve_valuation(request, pk):
         created_by=request.user
     )
 
-    # Create valuation history entry
+    # Add this approval to the valuation history record.
     ValuationHistory.objects.create(
         valuation=valuation,
         action='approved_by_sv',
@@ -685,7 +698,7 @@ def senior_valuer_approve_valuation(request, pk):
     except Exception:
         pass
 
-    # Feature #3 (C1): notify the field officer + MD/GM users.
+    # Notify the field officer and every MD/GM user about the next step.
     try:
         from notifications.services import notify
         meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
@@ -721,7 +734,7 @@ def senior_valuer_approve_valuation(request, pk):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def senior_valuer_reject_valuation(request, pk):
-    """Reject a valuation (change status to rejected) - Only senior valuer can do this"""
+    """Rejects a reviewed valuation at senior valuer stage."""
     valuation = get_object_or_404(Valuation, pk=pk)
     
     # Check if user is a senior valuer (has senior_valuer role)
@@ -745,7 +758,7 @@ def senior_valuer_reject_valuation(request, pk):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Get rejection reason from request
+    # The reason is mandatory so the earlier reviewers know what failed.
     rejection_reason = request.data.get('rejection_reason', '').strip()
     if not rejection_reason:
         return Response(
@@ -753,7 +766,7 @@ def senior_valuer_reject_valuation(request, pk):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Update valuation status and rejection reason
+    # Save the senior valuer's rejection on the valuation.
     valuation.status = 'rejected'
     valuation.rejection_reason = rejection_reason
     valuation.save(update_fields=['status', 'rejection_reason', 'updated_at'])
@@ -767,7 +780,7 @@ def senior_valuer_reject_valuation(request, pk):
         created_by=request.user
     )
 
-    # Create valuation history entry
+    # Keep a history record for audit and tracking.
     ValuationHistory.objects.create(
         valuation=valuation,
         action='rejected_by_sv',
@@ -775,7 +788,7 @@ def senior_valuer_reject_valuation(request, pk):
         comments=rejection_reason,
     )
 
-    # Notify assessor and field officer
+    # Inform both the accessor and the field officer about the rejection.
     sv_name = request.user.get_full_name() or request.user.username
     notification_msg = f'{valuation.get_category_display()} valuation for project "{valuation.project.title}" has been rejected by Senior Valuer ({sv_name}). Reason: {rejection_reason}'
     meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
@@ -818,11 +831,12 @@ def senior_valuer_reject_valuation(request, pk):
 # ============================================================================
 
 class MDGMValuationListView(generics.ListAPIView):
-    """List approved valuations for MD/GM review"""
+    """Shows valuations that are ready for final MD/GM review."""
     permission_classes = [IsAuthenticated]
     serializer_class = ValuationSerializer
 
     def get_queryset(self):
+        """Returns approved workflow items visible to the logged-in MD/GM user."""
         user = self.request.user
 
         if not hasattr(user, 'role') or user.role.role != 'md_gm':
@@ -844,7 +858,7 @@ class MDGMValuationListView(generics.ListAPIView):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def md_gm_approve_valuation(request, pk):
-    """MD/GM approves a valuation (change status to md_approved)"""
+    """Completes final approval at MD/GM stage."""
     valuation = get_object_or_404(Valuation, pk=pk)
 
     if not hasattr(request.user, 'role') or request.user.role.role != 'md_gm':
@@ -874,7 +888,7 @@ def md_gm_approve_valuation(request, pk):
         created_by=request.user
     )
 
-    # Create valuation history entry
+    # Record the final approval in valuation history.
     ValuationHistory.objects.create(
         valuation=valuation,
         action='md_approved',
@@ -898,7 +912,7 @@ def md_gm_approve_valuation(request, pk):
         meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
         title = f'Valuation approved by MD/GM — {valuation.project.title}'
 
-        # Actor
+        # Confirm the action back to the MD/GM user.
         send_notification(
             user=request.user,
             category='valuation',
@@ -909,7 +923,7 @@ def md_gm_approve_valuation(request, pk):
             action_url=f'/dashboard/projects/{valuation.project.id}',
         )
 
-        # Stakeholders
+        # Inform everyone involved that final approval is complete.
         stakeholders = [
             valuation.field_officer,
             valuation.project.assigned_senior_valuer,
@@ -939,7 +953,7 @@ def md_gm_approve_valuation(request, pk):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def md_gm_reject_valuation(request, pk):
-    """MD/GM rejects a valuation (change status to rejected)"""
+    """Rejects a valuation at the final MD/GM stage."""
     valuation = get_object_or_404(Valuation, pk=pk)
 
     if not hasattr(request.user, 'role') or request.user.role.role != 'md_gm':
@@ -977,7 +991,7 @@ def md_gm_reject_valuation(request, pk):
         created_by=request.user
     )
 
-    # Create valuation history entry
+    # Keep a history record for the final-stage rejection.
     ValuationHistory.objects.create(
         valuation=valuation,
         action='rejected_by_mdgm',
@@ -985,7 +999,7 @@ def md_gm_reject_valuation(request, pk):
         comments=rejection_reason,
     )
 
-    # Notify senior valuer and field officer
+    # Notify the senior valuer and the field officer about the rejection.
     mdgm_name = request.user.get_full_name() or request.user.username
     notification_msg = f'{valuation.get_category_display()} valuation for project "{valuation.project.title}" has been rejected by MD/GM ({mdgm_name}). Reason: {rejection_reason}'
     meta = {'valuation_id': valuation.id, 'project_id': valuation.project.id}
@@ -1032,11 +1046,12 @@ def md_gm_reject_valuation(request, pk):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def reorder_valuation_photos(request, valuation_id):
-    """Accept an ordered list of photo IDs and update ordering field."""
+    """Saves a new manual display order for the valuation's photos."""
     valuation = get_object_or_404(Valuation, pk=valuation_id)
     ordered_ids = request.data.get('photo_ids', [])
     if not isinstance(ordered_ids, list):
         return Response({'error': 'photo_ids must be a list'}, status=400)
+    # Each photo gets its new position number from the incoming list order.
     for idx, photo_id in enumerate(ordered_ids):
         ValuationPhoto.objects.filter(pk=photo_id, valuation=valuation).update(ordering=idx)
     return Response({'status': 'ok'})
@@ -1046,8 +1061,9 @@ def reorder_valuation_photos(request, valuation_id):
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def set_primary_photo(request, valuation_id, photo_id):
-    """Set one photo as primary (clears all others for this valuation first)."""
+    """Marks one photo as the main photo and clears the primary flag from the rest."""
     valuation = get_object_or_404(Valuation, pk=valuation_id)
+    # Only one photo can be primary, so clear all flags first.
     ValuationPhoto.objects.filter(valuation=valuation).update(is_primary=False)
     updated = ValuationPhoto.objects.filter(pk=photo_id, valuation=valuation).update(is_primary=True)
     if not updated:
