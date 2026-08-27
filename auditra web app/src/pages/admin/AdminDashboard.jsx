@@ -69,7 +69,8 @@ export default function AdminDashboard() {
   const barData = stats?.new_projects_per_month || [];
 
   return (
-    <Box>
+
+<Box>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Admin Dashboard</Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
